@@ -1,0 +1,78 @@
+import { randomInt } from 'node:crypto';
+
+const words = [
+  'amber',
+  'anchor',
+  'apple',
+  'atlas',
+  'bamboo',
+  'beacon',
+  'birch',
+  'breeze',
+  'brook',
+  'cabin',
+  'cedar',
+  'cinder',
+  'cloud',
+  'comet',
+  'coral',
+  'cosmos',
+  'crane',
+  'dawn',
+  'delta',
+  'ember',
+  'falcon',
+  'fern',
+  'fjord',
+  'forest',
+  'fox',
+  'garden',
+  'glade',
+  'harbor',
+  'hazel',
+  'heron',
+  'island',
+  'jade',
+  'lake',
+  'lantern',
+  'lark',
+  'laurel',
+  'lemon',
+  'maple',
+  'meadow',
+  'mesa',
+  'mint',
+  'moon',
+  'oak',
+  'oasis',
+  'ocean',
+  'olive',
+  'orbit',
+  'otter',
+  'pearl',
+  'pine',
+  'quartz',
+  'raven',
+  'reef',
+  'river',
+  'robin',
+  'sage',
+  'shore',
+  'sparrow',
+  'stone',
+  'summit',
+  'tulip',
+  'valley',
+  'willow',
+  'zephyr',
+] as const;
+
+const symbols = ['!', '@', '#', '$', '%', '&', '*', '?'] as const;
+
+export function generateTemporaryPassword(): string {
+  const selectedWords = Array.from({ length: 5 }, () => words[randomInt(words.length)]);
+  const number = randomInt(100_000, 1_000_000);
+  const symbol = symbols[randomInt(symbols.length)];
+
+  return `${selectedWords.join('-')}-${number}${symbol}`;
+}

@@ -1,6 +1,12 @@
 import { toNodeHandler } from 'better-auth/node';
 
-import { auth } from '@/modules/auth/server';
+import { getAuth } from '@/modules/auth/server';
 
 export const config = { api: { bodyParser: false } };
-export default toNodeHandler(auth);
+export default async function authHandler(
+  req: Parameters<ReturnType<typeof toNodeHandler>>[0],
+  res: Parameters<ReturnType<typeof toNodeHandler>>[1],
+) {
+  const auth = await getAuth();
+  return toNodeHandler(auth)(req, res);
+}

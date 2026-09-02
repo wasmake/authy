@@ -12,6 +12,8 @@ export default apiHandler(async (req, res) => {
       name: true,
       email: true,
       image: true,
+      mustChangePassword: true,
+      onboardingCompletedAt: true,
       memberships: {
         where: { organizationId: context.organizationId },
         include: {

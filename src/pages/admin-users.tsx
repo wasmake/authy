@@ -24,7 +24,15 @@ type AdminUser = {
   id: string;
   organizationRole: OrganizationRole;
   status: UserStatus;
-  user: { id: string; name: string; email: string; image: string | null };
+  user: {
+    id: string;
+    name: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    image: string | null;
+    companyRole: string;
+  };
   roles: Choice[];
   groups: Choice[];
   applications: ApplicationChoice[];
@@ -48,7 +56,10 @@ export default function AdminUsers() {
   const [query, setQuery] = useState('');
   const [panel, setPanel] = useState<'add' | 'manage' | null>(null);
   const [selectedId, setSelectedId] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [companyRole, setCompanyRole] = useState('');
   const [organizationRole, setOrganizationRole] = useState<OrganizationRole>('MEMBER');
   const [status, setStatus] = useState<UserStatus>('ACTIVE');
   const [selections, setSelections] = useState(emptySelections);
@@ -60,7 +71,10 @@ export default function AdminUsers() {
   const filteredUsers = (usersApi.data?.users ?? []).filter((membership) => {
     const searchable = [
       membership.user.name,
+      membership.user.firstName,
+      membership.user.lastName,
       membership.user.email,
+      membership.user.companyRole,
       membership.organizationRole,
       membership.status,
       ...membership.roles.map((role) => role.name),
@@ -84,7 +98,10 @@ export default function AdminUsers() {
   }, [panel, selected]);
 
   function openAdd() {
+    setFirstName('');
+    setLastName('');
     setEmail('');
+    setCompanyRole('');
     setOrganizationRole('MEMBER');
     setStatus('ACTIVE');
     setSelections(emptySelections);
@@ -98,8 +115,8 @@ export default function AdminUsers() {
     setPanel('manage');
   }
 
-  function closePanel() {
-    if (saving) return;
+  function closePanel(force = false) {
+    if (saving && !force) return;
     setPanel(null);
     setSelectedId('');
     setActionError('');
@@ -113,14 +130,21 @@ export default function AdminUsers() {
       const created = await request<AdminUser>('/api/v1/admin/users', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, organizationRole, ...selections }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email,
+          companyRole,
+          organizationRole,
+          ...selections,
+        }),
       });
       usersApi.setData((current) =>
         current && created
           ? { ...current, users: [...current.users, created].sort(compareUsers) }
           : current,
       );
-      closePanel();
+      closePanel(true);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Unable to add user');
     } finally {
@@ -161,7 +185,7 @@ export default function AdminUsers() {
             }
           : current,
       );
-      closePanel();
+      closePanel(true);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Unable to update user');
     } finally {
@@ -181,7 +205,7 @@ export default function AdminUsers() {
           ? { ...current, users: current.users.filter((user) => user.id !== selected.id) }
           : current,
       );
-      closePanel();
+      closePanel(true);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Unable to remove user');
     } finally {
@@ -207,7 +231,7 @@ export default function AdminUsers() {
             </a>
           </Link>
           <button className="button gap-2" onClick={openAdd} type="button">
-            <UserPlus size={17} /> Add existing user
+            <UserPlus size={17} /> Create user
           </button>
         </div>
       </header>
@@ -261,13 +285,22 @@ export default function AdminUsers() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-3">
                         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-muted font-semibold text-primary">
-                          {membership.user.name.charAt(0).toUpperCase() || (
+                          {membership.user.firstName.charAt(0).toUpperCase() || (
                             <CircleUserRound size={18} />
                           )}
                         </span>
                         <div>
-                          <p className="font-medium">{membership.user.name}</p>
+                          <p className="font-medium">
+                            {membership.user.firstName} {membership.user.lastName}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            First: {membership.user.firstName} / Last:{' '}
+                            {membership.user.lastName || 'Not provided'}
+                          </p>
                           <p className="text-xs text-slate-500">{membership.user.email}</p>
+                          <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            {membership.user.companyRole}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -334,18 +367,18 @@ export default function AdminUsers() {
                     {panel === 'add' ? 'Directory enrollment' : 'Access profile'}
                   </p>
                   <h2 className="mt-2 text-xl font-semibold" id="user-panel-title">
-                    {panel === 'add' ? 'Add an existing account' : selected?.user.name}
+                    {panel === 'add' ? 'Create or enroll a user' : selected?.user.name}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
                     {panel === 'add'
-                      ? 'The email must already have an Authy account.'
+                      ? 'New users receive temporary sign-in credentials by email.'
                       : selected?.user.email}
                   </p>
                 </div>
                 <button
                   aria-label="Close panel"
                   className="button-secondary !min-h-[36px] !px-2.5"
-                  onClick={closePanel}
+                  onClick={() => closePanel()}
                   type="button"
                 >
                   <X size={18} />
@@ -354,20 +387,95 @@ export default function AdminUsers() {
 
               <div className="space-y-7 p-6">
                 {panel === 'add' && (
-                  <div>
-                    <label className="text-sm font-medium" htmlFor="user-email">
-                      Account email
-                    </label>
-                    <input
-                      className="input mt-2"
-                      id="user-email"
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="person@company.com"
-                      required
-                      type="email"
-                      value={email}
-                    />
+                  <div className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="text-sm font-medium" htmlFor="user-first-name">
+                          First name
+                        </label>
+                        <input
+                          autoComplete="given-name"
+                          className="input mt-2"
+                          id="user-first-name"
+                          onChange={(event) => setFirstName(event.target.value)}
+                          required
+                          value={firstName}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium" htmlFor="user-last-name">
+                          Last name
+                        </label>
+                        <input
+                          autoComplete="family-name"
+                          className="input mt-2"
+                          id="user-last-name"
+                          onChange={(event) => setLastName(event.target.value)}
+                          required
+                          value={lastName}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="text-sm font-medium" htmlFor="user-email">
+                          Account email
+                        </label>
+                        <input
+                          autoComplete="email"
+                          className="input mt-2"
+                          id="user-email"
+                          onChange={(event) => setEmail(event.target.value)}
+                          placeholder="person@company.com"
+                          required
+                          type="email"
+                          value={email}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium" htmlFor="company-role">
+                          Company role
+                        </label>
+                        <input
+                          className="input mt-2"
+                          id="company-role"
+                          onChange={(event) => setCompanyRole(event.target.value)}
+                          placeholder="Software Engineer"
+                          required
+                          value={companyRole}
+                        />
+                      </div>
+                    </div>
+                    <p className="rounded-xl bg-primary/10 p-3 text-sm text-slate-600 dark:text-slate-300">
+                      A secure temporary password will be generated and credentials emailed to new
+                      users. Existing accounts keep their current credentials.
+                    </p>
                   </div>
+                )}
+
+                {panel === 'manage' && selected && (
+                  <dl className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-3">
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        First name
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium">{selected.user.firstName}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Last name
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium">
+                        {selected.user.lastName || 'Not provided'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Company role
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium">{selected.user.companyRole}</dd>
+                    </div>
+                  </dl>
                 )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -454,12 +562,16 @@ export default function AdminUsers() {
                   <span />
                 )}
                 <div className="flex gap-2">
-                  <button className="button-secondary" onClick={closePanel} type="button">
+                  <button className="button-secondary" onClick={() => closePanel()} type="button">
                     Cancel
                   </button>
                   <button className="button min-w-[130px] gap-2" disabled={saving} type="submit">
                     {!saving && <Check size={16} />}
-                    {saving ? 'Saving...' : panel === 'add' ? 'Add user' : 'Save access'}
+                    {saving
+                      ? 'Saving...'
+                      : panel === 'add'
+                        ? 'Create and email credentials'
+                        : 'Save access'}
                   </button>
                 </div>
               </div>
@@ -543,7 +655,9 @@ function selectedChoices<T extends Choice>(choices: T[], ids: string[]): T[] {
 }
 
 function compareUsers(left: AdminUser, right: AdminUser): number {
-  return left.user.name.localeCompare(right.user.name);
+  return `${left.user.firstName} ${left.user.lastName}`.localeCompare(
+    `${right.user.firstName} ${right.user.lastName}`,
+  );
 }
 
 async function request<T = unknown>(url: string, init?: RequestInit): Promise<T | undefined> {

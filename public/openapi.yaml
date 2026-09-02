@@ -20,6 +20,27 @@ paths:
               { application/json: { schema: { $ref: '#/components/schemas/DataResponse' } } },
           }
         '401': { $ref: '#/components/responses/Error' }
+  /setup/status:
+    get:
+      security: []
+      summary: Check whether first-install setup is required
+      responses: { '200': { description: Setup status } }
+  /setup:
+    post:
+      security: []
+      summary: Create the first organization owner on an empty installation
+      responses:
+        {
+          '201': { description: Installation initialized },
+          '409': { $ref: '#/components/responses/Error' },
+        }
+  /auth/methods:
+    get:
+      security: []
+      summary: Resolve password or organization SSO for an email address
+      parameters:
+        [{ name: email, in: query, required: true, schema: { type: string, format: email } }]
+      responses: { '200': { description: Available sign-in method } }
   /applications:
     get:
       summary: List assigned or marketplace applications
@@ -105,8 +126,8 @@ paths:
       }
     post:
       {
-        summary: Add an existing account to the organization (admin),
-        responses: { '201': { description: Added } },
+        summary: Generate a credential user or enroll an existing account (admin),
+        responses: { '201': { description: User created and credentials emailed when new } },
       }
   /admin/users/{id}:
     patch:
@@ -133,6 +154,47 @@ paths:
       summary: Delete an RBAC group (admin)
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { '204': { description: Deleted } }
+  /admin/auth-providers:
+    get:
+      summary: List safe SSO provider metadata (admin)
+      responses: { '200': { description: Provider configurations without secrets } }
+    post:
+      summary: Configure Google, Microsoft, Slack, or Entra-backed Active Directory (admin)
+      responses: { '201': { description: Provider configured } }
+  /admin/auth-providers/{id}:
+    delete:
+      summary: Delete an organization SSO provider (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: Provider deleted } }
+  /vault:
+    get:
+      summary: List accessible Vault item metadata
+      responses: { '200': { description: Tenant-scoped metadata without encrypted values } }
+    post:
+      summary: Create and assign an encrypted Vault item (admin)
+      responses: { '201': { description: Vault item created } }
+  /vault/{id}:
+    patch:
+      summary: Update an encrypted Vault item and assignments (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Vault item updated } }
+    delete:
+      summary: Delete a Vault item (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: Vault item deleted } }
+  /vault/{id}/reveal:
+    post:
+      summary: Reveal an assigned Vault value and record an audit event
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Decrypted value; never cache } }
+  /account/password-changed:
+    post:
+      summary: Complete mandatory first-login password rotation
+      responses: { '200': { description: Password lifecycle state updated } }
+  /account/onboarding-complete:
+    post:
+      summary: Mark the guided product tour complete or skipped
+      responses: { '200': { description: Onboarding state updated } }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: authy.session_token }

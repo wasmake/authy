@@ -1,26 +1,118 @@
-import { betterAuth } from 'better-auth';
+import { APIError, betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { createAuthMiddleware } from 'better-auth/api';
+import type { SocialProviders } from 'better-auth/social-providers';
 
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
+import { decryptSecret } from '@/modules/security/encryption';
 
-export const auth = betterAuth({
-  appName: 'Authy',
-  baseURL: env.BETTER_AUTH_URL,
-  secret: env.BETTER_AUTH_SECRET,
-  database: prismaAdapter(db, { provider: 'postgresql' }),
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 10,
-    sendResetPassword: async ({ user, url }) => {
-      const { emailAdapter } = await import('@/modules/integrations/email');
-      await emailAdapter.sendPasswordReset(user.email, user.name, url);
+export async function getAuth() {
+  const configured = await db.authProviderConfig.findFirst({
+    where: { enabled: true },
+    orderBy: { updatedAt: 'desc' },
+  });
+  const socialProviders: SocialProviders = {};
+  if (configured) {
+    try {
+      const provider = {
+        clientId: configured.clientId,
+        clientSecret: decryptSecret(configured.clientSecretEncrypted),
+        disableSignUp: true,
+        prompt: 'select_account' as const,
+      };
+      if (configured.type === 'GOOGLE') {
+        socialProviders.google = { ...provider, hd: configured.domainHint ?? undefined };
+      } else if (configured.type === 'SLACK') {
+        socialProviders.slack = provider;
+      } else {
+        socialProviders.microsoft = {
+          ...provider,
+          tenantId: configured.tenantId ?? 'common',
+        };
+      }
+    } catch {
+      // Keep existing sessions usable so an administrator can repair an undecryptable provider.
+      console.error('Unable to decrypt active SSO provider configuration', { id: configured.id });
+    }
+  }
+
+  return betterAuth({
+    appName: 'Authy',
+    baseURL: env.BETTER_AUTH_URL,
+    secret: env.BETTER_AUTH_SECRET,
+    database: prismaAdapter(db, { provider: 'postgresql' }),
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session, context) => {
+            if (!configured || !context?.path.startsWith('/callback')) return;
+            const membership = await db.membership.findUnique({
+              where: {
+                organizationId_userId: {
+                  organizationId: configured.organizationId,
+                  userId: session.userId,
+                },
+              },
+              select: { id: true },
+            });
+            if (!membership) {
+              throw new APIError('FORBIDDEN', {
+                message: 'This SSO connection does not grant access to your organization.',
+              });
+            }
+          },
+        },
+      },
     },
-  },
-  session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
-  advanced: {
-    useSecureCookies: process.env.NODE_ENV === 'production',
-    cookiePrefix: 'authy',
-  },
-  trustedOrigins: [env.BETTER_AUTH_URL],
-});
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: 14,
+      sendResetPassword: async ({ user, url }) => {
+        const { emailAdapter } = await import('@/modules/integrations/email');
+        await emailAdapter.sendPasswordReset(user.email, user.name, url);
+      },
+    },
+    socialProviders,
+    account: {
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ['google', 'microsoft', 'slack'],
+        allowDifferentEmails: false,
+      },
+    },
+    hooks: {
+      before: createAuthMiddleware(async (context) => {
+        if (context.path !== '/sign-in/email') return;
+        const email = (context.body as { email?: unknown } | undefined)?.email;
+        if (typeof email !== 'string') return;
+        const membership = await db.membership.findFirst({
+          where: { user: { email: { equals: email, mode: 'insensitive' } } },
+          select: { organization: { select: { passwordLoginEnabled: true } } },
+        });
+        if (membership && !membership.organization.passwordLoginEnabled) {
+          throw new APIError('FORBIDDEN', {
+            message: 'Password sign-in is disabled. Use your organization SSO provider.',
+          });
+        }
+      }),
+      after: createAuthMiddleware(async (context) => {
+        if (context.path !== '/change-password' || context.context.returned instanceof APIError) {
+          return;
+        }
+        const userId = context.context.session?.user.id;
+        if (!userId) return;
+        await db.user.updateMany({
+          where: { id: userId, mustChangePassword: true },
+          data: { mustChangePassword: false, onboardingCompletedAt: null },
+        });
+      }),
+    },
+    session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
+    advanced: {
+      useSecureCookies: process.env.NODE_ENV === 'production',
+      cookiePrefix: 'authy',
+    },
+    trustedOrigins: [env.BETTER_AUTH_URL],
+  });
+}

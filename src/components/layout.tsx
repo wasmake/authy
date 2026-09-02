@@ -1,5 +1,6 @@
 import {
   Grid3X3,
+  KeyRound,
   LayoutDashboard,
   Moon,
   Palette,
@@ -9,13 +10,16 @@ import {
   Sun,
   UserRound,
   UsersRound,
+  Vault,
   Workflow,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useTheme } from 'next-themes';
+import { useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
+import { ProductTour } from '@/components/product-tour';
 import { Spotlight } from '@/components/spotlight';
 import { useApi } from '@/hooks/use-api';
 
@@ -24,6 +28,8 @@ type Me = {
   name: string;
   email: string;
   image?: string | null;
+  mustChangePassword: boolean;
+  onboardingCompletedAt: string | null;
   organizationRole: string;
   organization: { name: string; logo?: string | null; primaryColor: string };
 };
@@ -33,9 +39,19 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
   const { theme, setTheme } = useTheme();
   const me = useApi<Me>('/api/v1/me');
   const canAdmin = admin || ['OWNER', 'ADMIN'].includes(me.data?.organizationRole ?? '');
+  const tourActive = router.query.tour === '1' && !me.data?.onboardingCompletedAt;
   const style = me.data?.organization.primaryColor
     ? ({ '--brand-color': me.data.organization.primaryColor } as CSSProperties)
     : undefined;
+
+  useEffect(() => {
+    if (me.data?.mustChangePassword && router.pathname !== '/change-password') {
+      void router.replace('/change-password');
+    }
+  }, [me.data?.mustChangePassword, router]);
+
+  if (me.data?.mustChangePassword) return null;
+
   return (
     <div className="min-h-screen md:grid md:grid-cols-[250px_minmax(0,1fr)]" style={style}>
       <aside className="flex border-b border-border bg-card p-4 md:sticky md:top-0 md:h-screen md:flex-col md:border-b-0 md:border-r">
@@ -62,7 +78,10 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
             <span>{me.data?.organization.name ?? 'Authy'}</span>
           </a>
         </Link>
-        <nav aria-label="Primary" className="ml-5 flex gap-1 md:ml-0 md:mt-7 md:flex-col">
+        <nav
+          aria-label="Primary"
+          className="ml-5 flex min-w-0 flex-1 gap-1 overflow-x-auto whitespace-nowrap md:ml-0 md:mt-7 md:flex-none md:flex-col md:overflow-visible"
+        >
           <Nav href="/" icon={<Grid3X3 size={17} />} active={router.pathname === '/'}>
             My apps
           </Nav>
@@ -72,6 +91,9 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
             active={router.pathname === '/marketplace'}
           >
             Marketplace
+          </Nav>
+          <Nav href="/vault" icon={<Vault size={17} />} active={router.pathname === '/vault'}>
+            Vault
           </Nav>
           {canAdmin && (
             <>
@@ -105,6 +127,13 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
                 active={router.pathname === '/admin-groups'}
               >
                 Groups & RBAC
+              </Nav>
+              <Nav
+                href="/admin-authentication"
+                icon={<KeyRound size={17} />}
+                active={router.pathname === '/admin-authentication'}
+              >
+                Authentication
               </Nav>
               <Nav
                 href="/admin-settings"
@@ -154,6 +183,7 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
         </div>
         <main className="p-5 md:p-8 xl:p-10">{children}</main>
       </div>
+      <ProductTour active={tourActive} admin={canAdmin} />
     </div>
   );
 }

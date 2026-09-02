@@ -1,9 +1,12 @@
+import { hashPassword } from 'better-auth/crypto';
 import { z } from 'zod';
 
 import { apiHandler, method, parseBody } from '@/lib/api';
 import { db } from '@/lib/db';
 import { audit } from '@/modules/audit/service';
 import { requireAdmin, requireContext } from '@/modules/auth/context';
+import { emailAdapter } from '@/modules/integrations/email';
+import { generateTemporaryPassword } from '@/modules/users/temporary-password';
 
 const idList = z
   .array(z.string().trim().min(1))
@@ -12,7 +15,10 @@ const idList = z
 
 const createUserSchema = z
   .object({
+    firstName: z.string().trim().min(1).max(100),
+    lastName: z.string().trim().min(1).max(100),
     email: z.string().trim().email().max(320),
+    companyRole: z.string().trim().min(1).max(120),
     organizationRole: z.enum(['OWNER', 'ADMIN', 'MEMBER']).default('MEMBER'),
     roleIds: idList.default([]),
     groupIds: idList.default([]),
@@ -51,33 +57,65 @@ export default apiHandler(async (req, res) => {
   const input = parseBody(createUserSchema, req);
   await verifyTenantIds(context.organizationId, input);
 
-  const user = await db.user.findFirst({
+  const existingUser = await db.user.findFirst({
     where: { email: { equals: input.email, mode: 'insensitive' } },
     select: { id: true, email: true },
   });
-  if (!user) {
-    throw Object.assign(
-      new Error('No account exists for this email. Ask the user to create an account first.'),
-      { statusCode: 404 },
-    );
-  }
 
-  const existing = await db.membership.findUnique({
-    where: {
-      organizationId_userId: {
-        organizationId: context.organizationId,
-        userId: user.id,
+  if (existingUser) {
+    const existingMembership = await db.membership.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: context.organizationId,
+          userId: existingUser.id,
+        },
       },
-    },
-    select: { id: true },
-  });
-  if (existing) {
-    throw Object.assign(new Error('This user is already a member of the organization'), {
-      statusCode: 409,
+      select: { id: true },
     });
+    if (existingMembership) {
+      throw Object.assign(new Error('This user is already a member of the organization'), {
+        statusCode: 409,
+      });
+    }
   }
 
-  const membership = await db.$transaction(async (transaction) => {
+  const temporaryPassword = existingUser ? undefined : generateTemporaryPassword();
+  const passwordHash = temporaryPassword ? await hashPassword(temporaryPassword) : undefined;
+  const result = await db.$transaction(async (transaction) => {
+    const user = existingUser
+      ? await transaction.user.update({
+          where: { id: existingUser.id },
+          data: {
+            firstName: input.firstName,
+            lastName: input.lastName,
+            name: `${input.firstName} ${input.lastName}`,
+            companyRole: input.companyRole,
+          },
+          select: { id: true, email: true },
+        })
+      : await transaction.user.create({
+          data: {
+            firstName: input.firstName,
+            lastName: input.lastName,
+            name: `${input.firstName} ${input.lastName}`,
+            email: input.email.toLocaleLowerCase(),
+            companyRole: input.companyRole,
+            mustChangePassword: true,
+          },
+          select: { id: true, email: true },
+        });
+
+    if (passwordHash) {
+      await transaction.account.create({
+        data: {
+          accountId: user.id,
+          providerId: 'credential',
+          userId: user.id,
+          password: passwordHash,
+        },
+      });
+    }
+
     const created = await transaction.membership.create({
       data: {
         organizationId: context.organizationId,
@@ -101,7 +139,7 @@ export default apiHandler(async (req, res) => {
         })),
       });
     }
-    return created;
+    return { membership: created, user };
   });
 
   await audit({
@@ -109,12 +147,30 @@ export default apiHandler(async (req, res) => {
     actorId: context.userId,
     action: 'membership.created',
     targetType: 'membership',
-    targetId: membership.id,
-    metadata: { userId: user.id, email: user.email, organizationRole: input.organizationRole },
+    targetId: result.membership.id,
+    metadata: {
+      userId: result.user.id,
+      email: result.user.email,
+      organizationRole: input.organizationRole,
+      invited: !existingUser,
+    },
   });
 
-  const created = (await listUsers(context.organizationId, membership.id))[0];
-  res.status(201).json({ data: created });
+  if (temporaryPassword) {
+    const organization = await db.organization.findUniqueOrThrow({
+      where: { id: context.organizationId },
+      select: { name: true },
+    });
+    await emailAdapter.sendCredentials(
+      result.user.email,
+      `${input.firstName} ${input.lastName}`,
+      organization.name,
+      temporaryPassword,
+    );
+  }
+
+  const created = (await listUsers(context.organizationId, result.membership.id))[0];
+  res.status(201).json({ data: { ...created, invited: !existingUser } });
 });
 
 async function listUsers(organizationId: string, membershipId?: string) {
@@ -126,8 +182,11 @@ async function listUsers(organizationId: string, membershipId?: string) {
         select: {
           id: true,
           name: true,
+          firstName: true,
+          lastName: true,
           email: true,
           image: true,
+          companyRole: true,
           suspendedAt: true,
           groupMembers: {
             where: { group: { organizationId } },
@@ -148,20 +207,29 @@ async function listUsers(organizationId: string, membershipId?: string) {
     },
   });
 
-  return memberships.map((membership) => ({
-    id: membership.id,
-    organizationRole: membership.role,
-    status: membership.user.suspendedAt ? ('SUSPENDED' as const) : ('ACTIVE' as const),
-    user: {
-      id: membership.user.id,
-      name: membership.user.name,
-      email: membership.user.email,
-      image: membership.user.image,
-    },
-    roles: membership.roles.map(({ role }) => role),
-    groups: membership.user.groupMembers.map(({ group }) => group),
-    applications: membership.user.assignments.map(({ application }) => application),
-  }));
+  return memberships.map((membership) => {
+    const [legacyFirstName = membership.user.name, ...legacyLastName] = membership.user.name
+      .trim()
+      .split(/\s+/);
+
+    return {
+      id: membership.id,
+      organizationRole: membership.role,
+      status: membership.user.suspendedAt ? ('SUSPENDED' as const) : ('ACTIVE' as const),
+      user: {
+        id: membership.user.id,
+        name: membership.user.name,
+        firstName: membership.user.firstName?.trim() || legacyFirstName,
+        lastName: membership.user.lastName?.trim() || legacyLastName.join(' '),
+        email: membership.user.email,
+        image: membership.user.image,
+        companyRole: membership.user.companyRole,
+      },
+      roles: membership.roles.map(({ role }) => role),
+      groups: membership.user.groupMembers.map(({ group }) => group),
+      applications: membership.user.assignments.map(({ application }) => application),
+    };
+  });
 }
 
 async function verifyTenantIds(

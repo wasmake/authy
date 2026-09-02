@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   await page.goto('/sign-in');
   await page.getByLabel('Work email').fill('admin@acme.test');
+  await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Password').fill('DemoPassword123!');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/');

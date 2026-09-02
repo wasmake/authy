@@ -14,7 +14,7 @@ The complete platform is a deliberately simple Next.js modular monolith. The UI,
 
 ### Secure Sign-In
 
-The focused sign-in experience uses Better Auth credential sessions and keeps privileged application data out of the browser until authentication succeeds.
+The focused sign-in experience resolves each organization policy before using Better Auth credentials, Google Workspace, Microsoft, Slack, or Microsoft Entra ID. Enabling SSO disables password sign-in for that organization.
 
 ![Authy secure sign-in screen](docs/screenshots/sign-in.png)
 
@@ -57,6 +57,12 @@ Groups bundle membership and inherited application permissions into reusable, au
 ## Capabilities
 
 - Better Auth email/password sign-in, sign-out, recovery hooks, secure sessions, and HTTP-only cookies
+- Admin-managed Google Workspace, Microsoft, Slack, and Microsoft Entra ID SSO with encrypted provider secrets
+- Entra-backed Active Directory support for cloud or federated directories
+- One-time fresh-install owner setup with no seeded users or shared demo passwords
+- Admin-generated users with emailed temporary credentials and mandatory first-login password rotation
+- Animated password-strength guidance and a skippable, auto-navigating product tour
+- Encrypted tenant Vault for passwords, secrets, and environment variables with direct/group access
 - Strict organization membership checks on every protected domain query
 - User and administrator capability separation with owner, admin, and member roles
 - Searchable application marketplace for OIDC, SAML, link, local, and internal applications
@@ -83,17 +89,13 @@ Requirements: Docker with the Compose plugin.
 cp .env.example .env
 # Replace POSTGRES_PASSWORD and BETTER_AUTH_SECRET in .env.
 docker compose up --build -d
-docker compose exec app npx prisma db seed
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Both demo accounts use `DemoPassword123!`.
-
-| Experience    | Email             |
-| ------------- | ----------------- |
-| Administrator | `admin@acme.test` |
-| User          | `user@acme.test`  |
+Open [http://localhost:3000](http://localhost:3000). A fresh database redirects to `/setup`, where you create the organization and its first owner. Setup is permanently disabled as soon as the first user exists.
 
 The application container applies committed migrations before starting. PostgreSQL data is retained in the `authy-postgres` Docker volume.
+
+For Dokploy, select `docker-compose.dokploy.yml`, expose the `app` service on container port `3000`, and configure `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` in the Compose environment. The deployment file intentionally publishes no host ports because Dokploy routes traffic through Traefik.
 
 ## Local Development
 
@@ -106,7 +108,21 @@ npm run db:seed
 npm run dev
 ```
 
-The root `.env` is the single runtime configuration source. Use `INTEGRATION_MODE=mock` without provider credentials, or set it to `live` and supply `RESEND_API_KEY` for email delivery.
+The root `.env` is the single runtime configuration source. Use `INTEGRATION_MODE=mock` to print generated credentials to the application console for local development, or set it to `live` and supply `RESEND_API_KEY` for email delivery. `BETTER_AUTH_SECRET` also derives the AES-256-GCM key used for SSO and Vault secrets, so back it up and do not rotate it without re-encrypting stored values.
+
+## Authentication And Directory Setup
+
+Owners configure workforce sign-in under **Admin > Authentication**. Copy the callback URL shown for the provider into its OAuth application, enter the client credentials, then activate the connection. Only one provider can be active for an installation because Better Auth provider identifiers are process-wide. Activation is transactional and disables email/password login for the organization; deleting or disabling the final active provider restores it.
+
+![Authy SSO and Active Directory provider configuration](docs/screenshots/authentication-settings.png)
+
+Google Workspace can be restricted with a hosted-domain hint. Microsoft and Active Directory connections require a Microsoft Entra tenant ID. On-premises Active Directory must be synchronized or federated to Entra ID, or exposed through a standards-compatible OIDC bridge; this application does not accept LDAP binds or Kerberos credentials directly.
+
+Administrators create workforce identities under **Admin > People** with first name, last name, email, company role, organization standing, RBAC roles, groups, and direct application access. New credential users receive a random multi-word temporary password by email. Their first session is restricted to password rotation, followed by a skippable guided tour.
+
+The **Vault** stores credential pairs, opaque secrets, and environment variable blocks. Values are encrypted at rest, omitted from list responses, scoped through user or group assignments, revealed only on demand, hidden again after 30 seconds, and audited on every reveal. Vault items are intentionally separate from OAuth, OIDC, and SAML application integrations.
+
+![Authy encrypted tenant Vault](docs/screenshots/vault.png)
 
 ## Architecture
 
@@ -131,17 +147,22 @@ src/
     auth/              Better Auth client, server, and tenant context
     integrations/      Resend and Composio-compatible adapters
     security/          Credentials and request rate limiting
+    users/             Password policy and temporary credential generation
+    vault/             Encrypted Vault schemas and access policy
   pages/
     api/auth/           Better Auth handler
     api/v1/             Versioned platform API
     admin.tsx           Administrator control plane
     admin-applications  Integration catalog and onboarding wizard
     admin-groups        Group membership and inherited permissions
+    admin-authentication SSO and directory provider configuration
     admin-settings      Organization branding and greeting
     admin-users         Identity roles, groups, and direct assignments
     index.tsx           Assigned application dashboard
     marketplace.tsx     Application discovery and requests
     profile.tsx         User identity and session settings
+    setup.tsx           One-time first-owner installation wizard
+    vault.tsx           Assigned secrets and administrator Vault controls
 prisma/                 Schema, migrations, and deterministic seed
 tests/                  Jest, RTL, and Playwright suites
 ```
@@ -175,6 +196,9 @@ Available resources include:
 - `GET|PATCH /api/v1/admin/settings` for tenant branding
 - `GET|POST /api/v1/admin/users` and `PATCH|DELETE /api/v1/admin/users/{id}` for member access
 - `GET|POST /api/v1/admin/groups` and `PATCH|DELETE /api/v1/admin/groups/{id}` for group RBAC
+- `GET|POST /api/v1/admin/auth-providers` for encrypted SSO configuration metadata
+- `GET|POST /api/v1/vault`, `PATCH|DELETE /api/v1/vault/{id}`, and `POST /api/v1/vault/{id}/reveal` for encrypted secrets
+- `GET /api/v1/setup/status` and one-time `POST /api/v1/setup` for fresh installations
 
 The OpenAPI 3 document is served at [`/openapi.yaml`](public/openapi.yaml). OIDC application redirect URIs, scopes, and claims and practical SAML metadata are represented in the catalog model. Link and local applications use the access-checked launch endpoint. Production protocol signing and provider metadata exchange should be completed against the deployment's selected OIDC or SAML provider before enabling federation.
 
@@ -185,6 +209,8 @@ The OpenAPI 3 document is served at [`/openapi.yaml`](public/openapi.yaml). OIDC
 - API keys use cryptographically random values, one-time secret disclosure, SHA-256 storage, and timing-safe comparison.
 - Better Auth session cookies are HTTP-only and become secure in production.
 - Redirect URIs and application URLs use validated schemas; privileged credentials never enter browser bundles.
+- SSO client secrets and Vault values use authenticated AES-256-GCM encryption and are never returned in metadata APIs.
+- Enabling SSO disables the Better Auth email/password endpoint for members of that organization.
 - API requests use validation, request rate limits, stable error codes, and sensitive-operation audit logs.
 - Default headers include CSP, frame denial, MIME sniffing prevention, referrer policy, and browser permission restrictions.
 
@@ -212,7 +238,7 @@ Set `PLAYWRIGHT_BASE_URL=http://localhost:3000` to run browser tests against an 
 # Create a development migration
 npm run db:migrate:dev -- --name descriptive_name
 
-# Apply committed migrations and optionally seed demo records
+# Apply committed migrations and optionally refresh role permissions
 npm run db:migrate
 npm run db:seed
 

@@ -32,250 +32,334 @@ enum CredentialStatus {
   REVOKED
 }
 
+enum AuthProviderType {
+  GOOGLE
+  MICROSOFT
+  SLACK
+  ACTIVE_DIRECTORY
+}
+
+enum VaultItemType {
+  CREDENTIAL
+  SECRET
+  ENVIRONMENT
+}
+
 model User {
-  id String @id @default(cuid())
-  name String
-  email String @unique
-  emailVerified Boolean @default(false)
-  image String?
-  suspendedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sessions Session[]
-  accounts Account[]
-  memberships Membership[]
-  assignments ApplicationAssignment[]
-  groupMembers GroupMember[]
-  requests AccessRequest[] @relation("Requester")
-  approvals AccessRequest[] @relation("Reviewer")
-  favorites Favorite[]
-  usage AppUsage[]
-  auditEvents AuditEvent[] @relation("Actor")
+  id                    String                  @id @default(cuid())
+  name                  String
+  firstName             String?
+  lastName              String?
+  email                 String                  @unique
+  emailVerified         Boolean                 @default(false)
+  image                 String?
+  suspendedAt           DateTime?
+  companyRole           String                  @default("Member")
+  mustChangePassword    Boolean                 @default(false)
+  onboardingCompletedAt DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  sessions              Session[]
+  accounts              Account[]
+  memberships           Membership[]
+  assignments           ApplicationAssignment[]
+  groupMembers          GroupMember[]
+  requests              AccessRequest[]         @relation("Requester")
+  approvals             AccessRequest[]         @relation("Reviewer")
+  favorites             Favorite[]
+  usage                 AppUsage[]
+  auditEvents           AuditEvent[]            @relation("Actor")
+  vaultAssignments      VaultAssignment[]
 }
 
 model Session {
-  id String @id @default(cuid())
-  expiresAt DateTime
-  token String @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  ipAddress String?
-  userAgent String?
-  userId String
+  id                   String   @id @default(cuid())
+  expiresAt            DateTime
+  token                String   @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
   activeOrganizationId String?
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Account {
-  id String @id @default(cuid())
-  accountId String
-  providerId String
-  userId String
-  accessToken String?
-  refreshToken String?
-  idToken String?
-  accessTokenExpiresAt DateTime?
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
-  scope String?
-  password String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([providerId, accountId])
 }
 
 model Verification {
-  id String @id @default(cuid())
+  id         String   @id @default(cuid())
   identifier String
-  value String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   @@index([identifier])
 }
 
 model Organization {
-  id String @id @default(cuid())
-  name String
-  slug String @unique
-  logo String?
-  greeting String @default("Welcome to your workspace")
-  primaryColor String @default("#6D5CE7")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  memberships Membership[]
-  groups Group[]
-  roles Role[]
-  applications Application[]
-  requests AccessRequest[]
-  apiKeys ApiKey[]
-  auditEvents AuditEvent[]
+  id                   String               @id @default(cuid())
+  name                 String
+  slug                 String               @unique
+  logo                 String?
+  greeting             String               @default("Welcome to your workspace")
+  primaryColor         String               @default("#6D5CE7")
+  passwordLoginEnabled Boolean              @default(true)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  memberships          Membership[]
+  groups               Group[]
+  roles                Role[]
+  applications         Application[]
+  requests             AccessRequest[]
+  apiKeys              ApiKey[]
+  auditEvents          AuditEvent[]
+  authProviders        AuthProviderConfig[]
+  vaultItems           VaultItem[]
 }
 
 model Membership {
-  id String @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  userId String
-  role OrganizationRole @default(MEMBER)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roles MembershipRole[]
+  userId         String
+  role           OrganizationRole @default(MEMBER)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles          MembershipRole[]
+
   @@unique([organizationId, userId])
 }
 
 model Group {
-  id String @id @default(cuid())
-  organizationId String
-  name String
-  description String?
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  members GroupMember[]
-  assignments ApplicationAssignment[]
+  id               String                  @id @default(cuid())
+  organizationId   String
+  name             String
+  description      String?
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members          GroupMember[]
+  assignments      ApplicationAssignment[]
+  vaultAssignments VaultAssignment[]
+
   @@unique([organizationId, name])
+}
+
+model AuthProviderConfig {
+  id                    String           @id @default(cuid())
+  organizationId        String
+  type                  AuthProviderType
+  displayName           String
+  clientId              String
+  clientSecretEncrypted String
+  tenantId              String?
+  domainHint            String?
+  enabled               Boolean          @default(false)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  organization          Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, type])
+  @@index([enabled])
+}
+
+model VaultItem {
+  id             String            @id @default(cuid())
+  organizationId String
+  name           String
+  type           VaultItemType
+  username       String?
+  encryptedValue String
+  description    String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments    VaultAssignment[]
+
+  @@unique([organizationId, name])
+}
+
+model VaultAssignment {
+  id          String    @id @default(cuid())
+  vaultItemId String
+  userId      String?
+  groupId     String?
+  vaultItem   VaultItem @relation(fields: [vaultItemId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group       Group?    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([vaultItemId, userId])
+  @@unique([vaultItemId, groupId])
 }
 
 model GroupMember {
   groupId String
-  userId String
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([groupId, userId])
 }
 
 model Role {
-  id String @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  name String
-  description String?
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  permissions RolePermission[]
-  memberships MembershipRole[]
+  name           String
+  description    String?
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions    RolePermission[]
+  memberships    MembershipRole[]
+
   @@unique([organizationId, name])
 }
 
 model Permission {
-  id String @id @default(cuid())
-  key String @unique
+  id          String           @id @default(cuid())
+  key         String           @unique
   description String
-  roles RolePermission[]
+  roles       RolePermission[]
 }
 
 model RolePermission {
-  roleId String
+  roleId       String
   permissionId String
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
   @@id([roleId, permissionId])
 }
 
 model MembershipRole {
   membershipId String
-  roleId String
-  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  roleId       String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
   @@id([membershipId, roleId])
 }
 
 model Application {
-  id String @id @default(cuid())
-  organizationId String
-  name String
-  description String?
-  type AppType
-  iconUrl String?
-  launchUrl String?
-  clientId String? @unique
+  id               String                  @id @default(cuid())
+  organizationId   String
+  name             String
+  description      String?
+  type             AppType
+  iconUrl          String?
+  launchUrl        String?
+  clientId         String?                 @unique
   clientSecretHash String?
-  redirectUris String[]
-  scopes String[]
-  claims Json?
-  samlMetadata Json?
-  isPublished Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignments ApplicationAssignment[]
-  requests AccessRequest[]
-  favorites Favorite[]
-  usage AppUsage[]
+  redirectUris     String[]
+  scopes           String[]
+  claims           Json?
+  samlMetadata     Json?
+  isPublished      Boolean                 @default(false)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  organization     Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments      ApplicationAssignment[]
+  requests         AccessRequest[]
+  favorites        Favorite[]
+  usage            AppUsage[]
+
   @@index([organizationId, isPublished])
 }
 
 model ApplicationAssignment {
-  id String @id @default(cuid())
+  id            String      @id @default(cuid())
   applicationId String
-  userId String?
-  groupId String?
-  entitlements String[]
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId        String?
+  groupId       String?
+  entitlements  String[]
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user          User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group         Group?      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
   @@unique([applicationId, userId])
   @@unique([applicationId, groupId])
 }
 
 model AccessRequest {
-  id String @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
-  applicationId String
-  requesterId String
-  reviewerId String?
-  reason String
-  decisionNote String?
-  status RequestStatus @default(PENDING)
-  createdAt DateTime @default(now())
-  decidedAt DateTime?
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  requester User @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
-  reviewer User? @relation("Reviewer", fields: [reviewerId], references: [id])
+  applicationId  String
+  requesterId    String
+  reviewerId     String?
+  reason         String
+  decisionNote   String?
+  status         RequestStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  decidedAt      DateTime?
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  application    Application   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  requester      User          @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  reviewer       User?         @relation("Reviewer", fields: [reviewerId], references: [id])
+
   @@index([organizationId, status])
 }
 
 model ApiKey {
-  id String @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  name String
-  prefix String @unique
-  secretHash String
-  scopes String[]
-  status CredentialStatus @default(ACTIVE)
-  expiresAt DateTime?
-  lastUsedAt DateTime?
-  createdAt DateTime @default(now())
-  revokedAt DateTime?
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  prefix         String           @unique
+  secretHash     String
+  scopes         String[]
+  status         CredentialStatus @default(ACTIVE)
+  expiresAt      DateTime?
+  lastUsedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  revokedAt      DateTime?
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model Favorite {
-  userId String
+  userId        String
   applicationId String
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
   @@id([userId, applicationId])
 }
 
 model AppUsage {
-  id String @id @default(cuid())
-  userId String
+  id            String      @id @default(cuid())
+  userId        String
   applicationId String
-  usedAt DateTime @default(now())
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  usedAt        DateTime    @default(now())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
   @@index([userId, usedAt])
 }
 
 model AuditEvent {
-  id String @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  actorId String?
-  action String
-  targetType String
-  targetId String?
-  ipAddress String?
-  metadata Json?
-  createdAt DateTime @default(now())
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  actor User? @relation("Actor", fields: [actorId], references: [id])
+  actorId        String?
+  action         String
+  targetType     String
+  targetId       String?
+  ipAddress      String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor          User?        @relation("Actor", fields: [actorId], references: [id])
+
   @@index([organizationId, createdAt])
 }

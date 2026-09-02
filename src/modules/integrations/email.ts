@@ -5,6 +5,12 @@ import { env } from '@/lib/env';
 export interface EmailAdapter {
   sendInvitation(email: string, organization: string, url: string): Promise<void>;
   sendPasswordReset(email: string, name: string, url: string): Promise<void>;
+  sendCredentials(
+    email: string,
+    name: string,
+    organization: string,
+    temporaryPassword: string,
+  ): Promise<void>;
 }
 
 class MockEmailAdapter implements EmailAdapter {
@@ -13,6 +19,15 @@ class MockEmailAdapter implements EmailAdapter {
   }
   async sendPasswordReset(email: string, name: string, url: string) {
     console.info('[mock-email] password-reset', { email, name, url });
+  }
+  async sendCredentials(
+    email: string,
+    _name: string,
+    _organization: string,
+    temporaryPassword: string,
+  ) {
+    // Intentional local-only exception: expose mock credentials so local sign-in remains usable.
+    console.info('[mock-email] credentials', { recipient: email, temporaryPassword });
   }
 }
 
@@ -32,6 +47,28 @@ class ResendEmailAdapter implements EmailAdapter {
       to: email,
       subject: 'Reset your Authy password',
       html: `<p>Hello ${name},</p><p><a href="${url}">Reset password</a></p>`,
+    });
+  }
+  async sendCredentials(
+    email: string,
+    name: string,
+    organization: string,
+    temporaryPassword: string,
+  ) {
+    await this.client.emails.send({
+      from: env.EMAIL_FROM,
+      to: email,
+      subject: `Your ${organization} Authy credentials`,
+      text: [
+        `Hello ${name},`,
+        '',
+        `An account has been created for you in ${organization}.`,
+        `Sign in: ${env.BETTER_AUTH_URL}/sign-in`,
+        `Email: ${email}`,
+        `Temporary password: ${temporaryPassword}`,
+        '',
+        'Sign in and change this temporary password immediately.',
+      ].join('\n'),
     });
   }
 }
