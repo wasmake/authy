@@ -2,6 +2,7 @@ import {
   Grid3X3,
   KeyRound,
   LayoutDashboard,
+  Mail,
   Moon,
   Palette,
   Search,
@@ -137,6 +138,13 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
                 active={router.pathname === '/admin-settings'}
               >
                 Brand settings
+              </Nav>
+              <Nav
+                href="/admin-email"
+                icon={<Mail size={17} />}
+                active={router.pathname === '/admin-email'}
+              >
+                Email delivery
               </Nav>
             </>
           )}

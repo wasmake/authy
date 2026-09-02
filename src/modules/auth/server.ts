@@ -69,8 +69,31 @@ export async function getAuth() {
       enabled: true,
       minPasswordLength: 14,
       sendResetPassword: async ({ user, url }) => {
-        const { emailAdapter } = await import('@/modules/integrations/email');
-        await emailAdapter.sendPasswordReset(user.email, user.name, url);
+        const memberships = await db.membership.findMany({
+          where: { userId: user.id },
+          select: { organizationId: true },
+          take: 2,
+        });
+        const { sendPasswordReset, sendSystemPasswordReset } =
+          await import('@/modules/integrations/email');
+        try {
+          if (memberships.length === 1) {
+            await sendPasswordReset({
+              organizationId: memberships[0].organizationId,
+              email: user.email,
+              name: user.name,
+              resetUrl: url,
+            });
+          } else {
+            await sendSystemPasswordReset({ email: user.email, name: user.name, resetUrl: url });
+          }
+        } catch (error) {
+          // Password-recovery responses must not reveal whether an account exists.
+          console.error('[password-reset-email-failed]', {
+            userId: user.id,
+            error: error instanceof Error ? error.message : 'Unknown delivery failure',
+          });
+        }
       },
     },
     socialProviders,

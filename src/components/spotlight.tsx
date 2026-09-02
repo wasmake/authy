@@ -36,6 +36,12 @@ const destinations: Destination[] = [
     href: '/admin-settings',
     admin: true,
   },
+  {
+    label: 'Email delivery',
+    detail: 'Resend connection and transactional templates',
+    href: '/admin-email',
+    admin: true,
+  },
   { label: 'Profile and security', detail: 'Account and active sessions', href: '/profile' },
 ];
 

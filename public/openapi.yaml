@@ -166,6 +166,47 @@ paths:
       summary: Delete an organization SSO provider (admin)
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { '204': { description: Provider deleted } }
+  /admin/email-settings:
+    get:
+      summary: Read safe Resend metadata and transactional email templates (admin)
+      responses: { '200': { description: Provider metadata without the API key and all templates } }
+    patch:
+      summary: Save encrypted Resend credentials, sender identity, and delivery state (admin)
+      responses:
+        {
+          '200': { description: Safe provider metadata },
+          '400': { $ref: '#/components/responses/Error' },
+        }
+  /admin/email-settings/templates/{type}:
+    patch:
+      summary: Sanitize and save a transactional email template (admin)
+      parameters:
+        - {
+            name: type,
+            in: path,
+            required: true,
+            schema: { $ref: '#/components/schemas/EmailTemplateType' },
+          }
+      responses:
+        { '200': { description: Saved template }, '400': { $ref: '#/components/responses/Error' } }
+    delete:
+      summary: Restore a transactional email template to its system default (admin)
+      parameters:
+        - {
+            name: type,
+            in: path,
+            required: true,
+            schema: { $ref: '#/components/schemas/EmailTemplateType' },
+          }
+      responses: { '200': { description: Default template } }
+  /admin/email-settings/test-send:
+    post:
+      summary: Send a template preview through the saved Resend connection (admin)
+      responses:
+        {
+          '200': { description: Test accepted by Resend },
+          '400': { $ref: '#/components/responses/Error' },
+        }
   /vault:
     get:
       summary: List accessible Vault item metadata
@@ -201,6 +242,9 @@ components:
     bearerAuth: { type: http, scheme: bearer }
   schemas:
     DataResponse: { type: object, required: [data], properties: { data: { type: object } } }
+    EmailTemplateType:
+      type: string
+      enum: [USER_CREDENTIALS, PASSWORD_RESET, INVITATION]
     Error:
       {
         type: object,

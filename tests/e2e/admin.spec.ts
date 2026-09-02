@@ -27,3 +27,20 @@ test('spotlight finds admin settings', async ({ page }) => {
   await page.getByRole('button', { name: /Organization settings/ }).click();
   await expect(page.getByRole('heading', { name: 'Make the workspace yours' })).toBeVisible();
 });
+
+test('admin can configure email delivery and edit templates', async ({ page }) => {
+  await page.getByRole('link', { name: 'Email delivery' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Emails that feel like your workspace' }),
+  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resend delivery' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: /New user credentials/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.getByRole('tab', { name: /Password reset/ }).click();
+  await expect(page.getByLabel('Subject')).toHaveValue(/Reset your .* password/);
+  await expect(page.getByTitle('Insert {{resetUrl}}')).toBeVisible();
+  await expect(page.getByTitle('Insert {{temporaryPassword}}')).toHaveCount(0);
+  await expect(page.getByTitle('Email template preview')).toBeVisible();
+});

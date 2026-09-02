@@ -76,7 +76,7 @@ Groups bundle membership and inherited application permissions into reusable, au
 - Organization greeting, logo, and primary-color settings with a live preview
 - One-time service credential display with hashed storage, rotation-ready metadata, and revocation
 - Tenant metrics for users, applications, requests, sign-ins, and security events
-- Resend transactional email adapter with a realistic console adapter for local development
+- Admin-managed Resend delivery with encrypted credentials, test sends, and WYSIWYG transactional templates
 - Composio-compatible integration boundary with a seeded local catalog adapter
 - Versioned, validated REST endpoints and an OpenAPI 3 specification
 - Dark and light themes, responsive layouts, keyboard focus states, and accessible controls
@@ -99,7 +99,7 @@ For Dokploy, select `docker-compose.dokploy.yml`, expose the `app` service on co
 
 ## Local Development
 
-Use Node.js 22 and a PostgreSQL instance. Set `DATABASE_URL` in the root `.env` to an address reachable from the host, then run:
+Use Node.js 22.12 or newer and a PostgreSQL instance. Set `DATABASE_URL` in the root `.env` to an address reachable from the host, then run:
 
 ```bash
 npm install
@@ -108,7 +108,7 @@ npm run db:seed
 npm run dev
 ```
 
-The root `.env` is the single runtime configuration source. Use `INTEGRATION_MODE=mock` to print generated credentials to the application console for local development, or set it to `live` and supply `RESEND_API_KEY` for email delivery. `BETTER_AUTH_SECRET` also derives the AES-256-GCM key used for SSO and Vault secrets, so back it up and do not rotate it without re-encrypting stored values.
+The root `.env` provides the initial runtime configuration. Use `INTEGRATION_MODE=mock` to print generated credentials to the application console for local development, or set it to `live` and supply `RESEND_API_KEY` plus `EMAIL_FROM` as an installation-level fallback. An organization-level Resend configuration takes precedence once saved. `BETTER_AUTH_SECRET` also derives the AES-256-GCM key used for SSO, Vault, and Resend secrets, so back it up and do not rotate it without re-encrypting stored values.
 
 ## Authentication And Directory Setup
 
@@ -117,6 +117,14 @@ Owners configure workforce sign-in under **Admin > Authentication**. Copy the ca
 ![Authy SSO and Active Directory provider configuration](docs/screenshots/authentication-settings.png)
 
 Google Workspace can be restricted with a hosted-domain hint. Microsoft and Active Directory connections require a Microsoft Entra tenant ID. On-premises Active Directory must be synchronized or federated to Entra ID, or exposed through a standards-compatible OIDC bridge; this application does not accept LDAP binds or Kerberos credentials directly.
+
+## Email Delivery
+
+Owners and administrators configure Resend under **Admin > Email delivery**. Create a restricted sending API key in Resend, verify the sender domain, save the sender identity, and send a test message before enabling delivery. API keys are encrypted at rest and never returned by the API. Disabling the organization configuration pauses transactional delivery instead of falling back to environment credentials.
+
+The message studio provides visual and source-HTML editing for new-user credentials, password resets, and organization invitations. Each template exposes only the placeholders available for that event, sanitizes saved HTML and links, supports a sandboxed sample preview, and can be restored to the system default. Changes affect future messages only.
+
+Password recovery uses an organization template only when the user belongs to exactly one organization. Installations that permit multi-organization membership must also configure the trusted `RESEND_API_KEY` and `EMAIL_FROM` environment fallback so no tenant administrator controls a shared account's reset token. Delivery failures are logged while the public recovery response remains indistinguishable from an unknown account.
 
 Administrators create workforce identities under **Admin > People** with first name, last name, email, company role, organization standing, RBAC roles, groups, and direct application access. New credential users receive a random multi-word temporary password by email. Their first session is restricted to password rotation, followed by a skippable guided tour.
 

@@ -3,9 +3,10 @@ import { z } from 'zod';
 
 import { apiHandler, method, parseBody } from '@/lib/api';
 import { db } from '@/lib/db';
+import { env } from '@/lib/env';
 import { audit } from '@/modules/audit/service';
 import { requireAdmin, requireContext } from '@/modules/auth/context';
-import { emailAdapter } from '@/modules/integrations/email';
+import { sendCredentials, sendInvitation } from '@/modules/integrations/email';
 import { generateTemporaryPassword } from '@/modules/users/temporary-password';
 
 const idList = z
@@ -59,7 +60,7 @@ export default apiHandler(async (req, res) => {
 
   const existingUser = await db.user.findFirst({
     where: { email: { equals: input.email, mode: 'insensitive' } },
-    select: { id: true, email: true },
+    select: { id: true, email: true, name: true },
   });
 
   if (existingUser) {
@@ -83,16 +84,7 @@ export default apiHandler(async (req, res) => {
   const passwordHash = temporaryPassword ? await hashPassword(temporaryPassword) : undefined;
   const result = await db.$transaction(async (transaction) => {
     const user = existingUser
-      ? await transaction.user.update({
-          where: { id: existingUser.id },
-          data: {
-            firstName: input.firstName,
-            lastName: input.lastName,
-            name: `${input.firstName} ${input.lastName}`,
-            companyRole: input.companyRole,
-          },
-          select: { id: true, email: true },
-        })
+      ? existingUser
       : await transaction.user.create({
           data: {
             firstName: input.firstName,
@@ -142,6 +134,39 @@ export default apiHandler(async (req, res) => {
     return { membership: created, user };
   });
 
+  try {
+    if (temporaryPassword) {
+      await sendCredentials({
+        organizationId: context.organizationId,
+        email: result.user.email,
+        name: existingUser?.name ?? `${input.firstName} ${input.lastName}`,
+        temporaryPassword,
+      });
+    } else {
+      await sendInvitation({
+        organizationId: context.organizationId,
+        email: result.user.email,
+        name: existingUser?.name ?? `${input.firstName} ${input.lastName}`,
+        signInUrl: `${env.BETTER_AUTH_URL}/sign-in`,
+      });
+    }
+  } catch (error) {
+    if (existingUser) {
+      await db.$transaction([
+        db.applicationAssignment.deleteMany({
+          where: { userId: result.user.id, applicationId: { in: input.applicationIds } },
+        }),
+        db.groupMember.deleteMany({
+          where: { userId: result.user.id, groupId: { in: input.groupIds } },
+        }),
+        db.membership.delete({ where: { id: result.membership.id } }),
+      ]);
+    } else {
+      await db.user.delete({ where: { id: result.user.id } });
+    }
+    throw error;
+  }
+
   await audit({
     organizationId: context.organizationId,
     actorId: context.userId,
@@ -153,21 +178,9 @@ export default apiHandler(async (req, res) => {
       email: result.user.email,
       organizationRole: input.organizationRole,
       invited: !existingUser,
+      notification: existingUser ? 'organization_access' : 'temporary_credentials',
     },
   });
-
-  if (temporaryPassword) {
-    const organization = await db.organization.findUniqueOrThrow({
-      where: { id: context.organizationId },
-      select: { name: true },
-    });
-    await emailAdapter.sendCredentials(
-      result.user.email,
-      `${input.firstName} ${input.lastName}`,
-      organization.name,
-      temporaryPassword,
-    );
-  }
 
   const created = (await listUsers(context.organizationId, result.membership.id))[0];
   res.status(201).json({ data: { ...created, invited: !existingUser } });
