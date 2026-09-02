@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: Authy Platform API
+  version: 1.0.0
+  description: Tenant-isolated identity, application access, and audit API.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      summary: Get authenticated identity, roles, and permissions
+      responses:
+        '200':
+          {
+            description: Identity response,
+            content:
+              { application/json: { schema: { $ref: '#/components/schemas/DataResponse' } } },
+          }
+        '401': { $ref: '#/components/responses/Error' }
+  /applications:
+    get:
+      summary: List assigned or marketplace applications
+      parameters:
+        - { name: marketplace, in: query, schema: { type: boolean } }
+      responses: { '200': { description: Application list } }
+    post:
+      summary: Register an application (admin)
+      responses:
+        {
+          '201': { description: Application created },
+          '403': { $ref: '#/components/responses/Error' },
+        }
+  /applications/{id}/assignments:
+    post:
+      summary: Assign an application to a user or group (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '201': { description: Assignment created } }
+  /applications/{id}/launch:
+    get:
+      summary: Validate access and launch an assigned application
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '302': { description: Redirect to application },
+          '403': { $ref: '#/components/responses/Error' },
+        }
+  /access-requests:
+    get: { summary: List access requests, responses: { '200': { description: Request list } } }
+    post:
+      { summary: Create an access request, responses: { '201': { description: Request created } } }
+  /access-requests/{id}:
+    patch:
+      summary: Approve or deny an access request (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Request decided } }
+  /api-keys:
+    get:
+      {
+        summary: List service credentials (admin),
+        responses: { '200': { description: Key metadata } },
+      }
+    post:
+      {
+        summary: Generate a service credential (admin),
+        responses: { '201': { description: Secret returned once } },
+      }
+  /audit-events:
+    get:
+      summary: Retrieve tenant audit events (admin)
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses: { '200': { description: Paginated events } }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: authy.session_token }
+    bearerAuth: { type: http, scheme: bearer }
+  schemas:
+    DataResponse: { type: object, required: [data], properties: { data: { type: object } } }
+    Error:
+      {
+        type: object,
+        required: [error],
+        properties:
+          {
+            error:
+              {
+                type: object,
+                required: [code, message],
+                properties: { code: { type: string }, message: { type: string }, details: {} },
+              },
+          },
+      }
+  responses:
+    Error:
+      {
+        description: Error response,
+        content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } },
+      }
