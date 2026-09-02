@@ -19,25 +19,14 @@ import { useTheme } from 'next-themes';
 import { useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
+import { useCurrentUser } from '@/components/me-provider';
 import { ProductTour } from '@/components/product-tour';
 import { Spotlight } from '@/components/spotlight';
-import { useApi } from '@/hooks/use-api';
-
-type Me = {
-  id: string;
-  name: string;
-  email: string;
-  image?: string | null;
-  mustChangePassword: boolean;
-  onboardingCompletedAt: string | null;
-  organizationRole: string;
-  organization: { name: string; logo?: string | null; primaryColor: string };
-};
 
 export function Layout({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const me = useApi<Me>('/api/v1/me');
+  const me = useCurrentUser();
   const canAdmin = admin || ['OWNER', 'ADMIN'].includes(me.data?.organizationRole ?? '');
   const tourActive = router.query.tour === '1' && !me.data?.onboardingCompletedAt;
   const style = me.data?.organization.primaryColor
@@ -75,7 +64,14 @@ export function Layout({ children, admin = false }: { children: ReactNode; admin
                 <ShieldCheck size={20} />
               )}
             </span>
-            <span>{me.data?.organization.name ?? 'Authy'}</span>
+            {me.data?.organization.name ? (
+              <span>{me.data.organization.name}</span>
+            ) : (
+              <span
+                aria-label="Loading organization"
+                className="h-5 w-24 animate-pulse rounded bg-muted motion-reduce:animate-none"
+              />
+            )}
           </a>
         </Link>
         <nav
