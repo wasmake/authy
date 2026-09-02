@@ -87,6 +87,10 @@ export default function SignIn() {
       setBusy(false);
       return;
     }
+    if (result.data && 'url' in result.data && typeof result.data.url === 'string') {
+      window.location.assign(result.data.url);
+      return;
+    }
     await router.push('/');
   }
 
