@@ -20,7 +20,7 @@ export async function getAuth() {
           clientId: env.OIDC_CLIENT_ID,
           clientSecret: env.OIDC_CLIENT_SECRET,
           type: 'web' as const,
-          name: 'ChatbotX',
+          name: env.OIDC_CLIENT_NAME,
           redirectURLs: [env.OIDC_REDIRECT_URI],
           metadata: null,
           disabled: false,

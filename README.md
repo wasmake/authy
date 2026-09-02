@@ -95,7 +95,7 @@ Open [http://localhost:3000](http://localhost:3000). A fresh database redirects 
 
 The application container applies committed migrations before starting. PostgreSQL data is retained in the `authy-postgres` Docker volume.
 
-For Dokploy, select `docker-compose.dokploy.yml`, expose the `app` service on container port `3000`, and configure `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` in the Compose environment. The deployment file intentionally publishes no host ports because Dokploy routes traffic through Traefik.
+For Dokploy, select `docker-compose.dokploy.yml`, expose the `app` service on container port `3000`, and configure `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` in the Compose environment. Add the `OIDC_CLIENT_*` variables described below when Authy will provide sign-in to another application. The deployment file intentionally publishes no host ports because Dokploy routes traffic through Traefik.
 
 ## Local Development
 
@@ -117,6 +117,14 @@ Owners configure workforce sign-in under **Admin > Authentication**. Copy the ca
 ![Authy SSO and Active Directory provider configuration](docs/screenshots/authentication-settings.png)
 
 Google Workspace can be restricted with a hosted-domain hint. Microsoft and Active Directory connections require a Microsoft Entra tenant ID. On-premises Active Directory must be synchronized or federated to Entra ID, or exposed through a standards-compatible OIDC bridge; this application does not accept LDAP binds or Kerberos credentials directly.
+
+### Downstream OIDC Client
+
+Authy can provide OpenID Connect sign-in to one trusted confidential client. Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` together. The client secret must contain at least 32 characters, redirect URIs are matched exactly, authorization-code flows require S256 PKCE, dynamic client registration is disabled, and ID tokens are signed with the persisted asymmetric key exposed by JWKS.
+
+Discovery is available at `${BETTER_AUTH_URL}/api/auth/.well-known/openid-configuration`. Downstream clients should request `openid profile email` and reject identities whose `email_verified` claim is not `true`.
+
+Set `OIDC_CLIENT_LAUNCH_URL` to also create or update the client in the application catalog at startup. `OIDC_CLIENT_NAME` defaults to `OIDC Application`, while `OIDC_CLIENT_DESCRIPTION` is optional. The catalog entry is published and assigned idempotently to current organization members.
 
 ## Email Delivery
 
@@ -208,7 +216,7 @@ Available resources include:
 - `GET|POST /api/v1/vault`, `PATCH|DELETE /api/v1/vault/{id}`, and `POST /api/v1/vault/{id}/reveal` for encrypted secrets
 - `GET /api/v1/setup/status` and one-time `POST /api/v1/setup` for fresh installations
 
-The OpenAPI 3 document is served at [`/openapi.yaml`](public/openapi.yaml). OIDC application redirect URIs, scopes, and claims and practical SAML metadata are represented in the catalog model. Link and local applications use the access-checked launch endpoint. Production protocol signing and provider metadata exchange should be completed against the deployment's selected OIDC or SAML provider before enabling federation.
+The OpenAPI 3 document is served at [`/openapi.yaml`](public/openapi.yaml). OIDC application redirect URIs, scopes, and claims and practical SAML metadata are represented in the catalog model. Link and local applications use the access-checked launch endpoint. Authy's downstream OIDC provider exposes signed metadata and JWKS; cataloged SAML integrations remain metadata records and require an external SAML identity provider.
 
 ## Security Model
 

@@ -7,6 +7,8 @@ const schema = z.object({
   OIDC_CLIENT_ID: z.string().min(1).optional(),
   OIDC_CLIENT_SECRET: z.string().min(32).optional(),
   OIDC_REDIRECT_URI: z.string().url().optional(),
+  OIDC_CLIENT_NAME: z.string().min(1).default('OIDC Application'),
+  OIDC_CLIENT_DESCRIPTION: z.string().max(500).optional(),
   OIDC_CLIENT_LAUNCH_URL: z.string().url().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('Authy <noreply@example.test>'),

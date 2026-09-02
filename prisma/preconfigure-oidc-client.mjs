@@ -9,6 +9,9 @@ async function main() {
   const redirectUri = process.env.OIDC_REDIRECT_URI;
   const launchUrl = process.env.OIDC_CLIENT_LAUNCH_URL;
   if (!clientId || !redirectUri || !launchUrl) return;
+  const name = process.env.OIDC_CLIENT_NAME?.trim() || 'OIDC Application';
+  const description =
+    process.env.OIDC_CLIENT_DESCRIPTION?.trim() || 'Managed OpenID Connect application.';
 
   const existing = await db.application.findUnique({ where: { clientId } });
   const organization = existing
@@ -22,8 +25,8 @@ async function main() {
   const application = await db.application.upsert({
     where: { clientId },
     update: {
-      name: 'ChatbotX',
-      description: 'Build and manage conversational experiences with Authy single sign-on.',
+      name,
+      description,
       type: 'OIDC',
       launchUrl,
       redirectUris: [redirectUri],
@@ -33,8 +36,8 @@ async function main() {
     },
     create: {
       organizationId: organization.id,
-      name: 'ChatbotX',
-      description: 'Build and manage conversational experiences with Authy single sign-on.',
+      name,
+      description,
       type: 'OIDC',
       launchUrl,
       clientId,
@@ -59,7 +62,7 @@ async function main() {
     skipDuplicates: true,
   });
 
-  console.info(`Preconfigured ChatbotX for ${memberships.length} Authy member(s).`);
+  console.info(`Preconfigured ${name} for ${memberships.length} Authy member(s).`);
 }
 
 main()
