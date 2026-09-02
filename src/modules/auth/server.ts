@@ -1,6 +1,7 @@
 import { APIError, betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { createAuthMiddleware } from 'better-auth/api';
+import { jwt, oidcProvider } from 'better-auth/plugins';
 import type { SocialProviders } from 'better-auth/social-providers';
 
 import { db } from '@/lib/db';
@@ -13,6 +14,19 @@ export async function getAuth() {
     orderBy: { updatedAt: 'desc' },
   });
   const socialProviders: SocialProviders = {};
+  const oidcClient =
+    env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URI
+      ? {
+          clientId: env.OIDC_CLIENT_ID,
+          clientSecret: env.OIDC_CLIENT_SECRET,
+          type: 'web' as const,
+          name: 'ChatbotX',
+          redirectURLs: [env.OIDC_REDIRECT_URI],
+          metadata: null,
+          disabled: false,
+          skipConsent: true,
+        }
+      : undefined;
   if (configured) {
     try {
       const provider = {
@@ -97,6 +111,16 @@ export async function getAuth() {
       },
     },
     socialProviders,
+    plugins: [
+      oidcProvider({
+        loginPage: '/sign-in',
+        requirePKCE: true,
+        allowPlainCodeChallengeMethod: false,
+        useJWTPlugin: true,
+        trustedClients: oidcClient ? [oidcClient] : [],
+      }),
+      jwt({ disableSettingJwtHeader: true }),
+    ],
     account: {
       accountLinking: {
         enabled: true,

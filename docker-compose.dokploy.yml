@@ -21,6 +21,9 @@ services:
       DATABASE_URL: postgresql://authy:${POSTGRES_PASSWORD}@db:5432/authy?schema=public
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-Authy <noreply@example.test>}
       INTEGRATION_MODE: ${INTEGRATION_MODE:-mock}
