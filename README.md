@@ -118,13 +118,115 @@ Owners configure workforce sign-in under **Admin > Authentication**. Copy the ca
 
 Google Workspace can be restricted with a hosted-domain hint. Microsoft and Active Directory connections require a Microsoft Entra tenant ID. On-premises Active Directory must be synchronized or federated to Entra ID, or exposed through a standards-compatible OIDC bridge; this application does not accept LDAP binds or Kerberos credentials directly.
 
-### Downstream OIDC Client
+### Downstream OIDC Integration
 
-Authy can provide OpenID Connect sign-in to one trusted confidential client. Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` together. The client secret must contain at least 32 characters, redirect URIs are matched exactly, authorization-code flows require S256 PKCE, dynamic client registration is disabled, and ID tokens are signed with the persisted asymmetric key exposed by JWKS.
+Authy can act as an OpenID Connect provider for one trusted confidential client. It implements the authorization-code flow with S256 PKCE, signed ID tokens, UserInfo, refresh tokens, and discovery. Dynamic client registration is disabled; the operator registers the trusted client through environment variables.
 
-Discovery is available at `${BETTER_AUTH_URL}/api/auth/.well-known/openid-configuration`. Downstream clients should request `openid profile email` and reject identities whose `email_verified` claim is not `true`.
+#### Configure Authy
 
-Set `OIDC_CLIENT_LAUNCH_URL` to also create or update the client in the application catalog at startup. `OIDC_CLIENT_NAME` defaults to `OIDC Application`, while `OIDC_CLIENT_DESCRIPTION` is optional. The catalog entry is published and assigned idempotently to current organization members.
+Set the following variables on the Authy server:
+
+```dotenv
+BETTER_AUTH_URL=https://auth.example.com
+OIDC_CLIENT_ID=platform-production
+OIDC_CLIENT_SECRET=replace-with-at-least-32-random-characters
+OIDC_REDIRECT_URI=https://platform.example.com/auth/callback
+
+# Optional application-catalog metadata
+OIDC_CLIENT_NAME=Example Platform
+OIDC_CLIENT_DESCRIPTION=Sign in to Example Platform with Authy
+OIDC_CLIENT_LAUNCH_URL=https://platform.example.com/sign-in
+```
+
+Generate a client secret with a cryptographically secure tool, for example `openssl rand -hex 32`. Configure the same client ID and secret in the downstream application, but never expose the secret to browser code or commit it to source control.
+
+`OIDC_REDIRECT_URI` is matched exactly. Its scheme, host, port, path, query, and trailing slash must match the URI sent in authorization and token requests. Use an HTTPS callback in production.
+
+Restart Authy after changing these variables. The OIDC provider is enabled only when `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` are all present.
+
+#### Discover Endpoints
+
+Clients should use discovery instead of hard-coding individual endpoints:
+
+```text
+https://auth.example.com/api/auth/.well-known/openid-configuration
+```
+
+The discovery document advertises endpoints under the configured `BETTER_AUTH_URL`:
+
+| Purpose          | Endpoint                     |
+| ---------------- | ---------------------------- |
+| Authorization    | `/api/auth/oauth2/authorize` |
+| Token exchange   | `/api/auth/oauth2/token`     |
+| UserInfo         | `/api/auth/oauth2/userinfo`  |
+| JSON Web Key Set | `/api/auth/jwks`             |
+
+Verify discovery after deployment:
+
+```bash
+curl -fsS \
+  https://auth.example.com/api/auth/.well-known/openid-configuration
+```
+
+`BETTER_AUTH_URL` must be the public HTTPS origin seen by users and the downstream client. An internal container URL produces an incorrect issuer and endpoint metadata.
+
+#### Configure The Downstream Client
+
+Use these values in a standards-compatible OIDC client library:
+
+| Setting              | Value                                                          |
+| -------------------- | -------------------------------------------------------------- |
+| Issuer               | The public `BETTER_AUTH_URL` value                             |
+| Discovery URL        | `${BETTER_AUTH_URL}/api/auth/.well-known/openid-configuration` |
+| Client ID            | The `OIDC_CLIENT_ID` value                                     |
+| Client secret        | The `OIDC_CLIENT_SECRET` value                                 |
+| Redirect URI         | The exact `OIDC_REDIRECT_URI` value                            |
+| Response type        | `code`                                                         |
+| Scopes               | `openid profile email`                                         |
+| PKCE method          | `S256`                                                         |
+| Token authentication | `client_secret_basic` or `client_secret_post`                  |
+
+The client should generate a new `state`, `nonce`, and PKCE verifier for each authorization request. After Authy redirects to the registered callback with an authorization code, the client backend exchanges the code together with the original verifier. Do not perform the token exchange from public browser code.
+
+Add `offline_access` to the requested scopes when the application needs a refresh token, and store refresh tokens only in encrypted server-side storage.
+
+Validate ID tokens with the discovery document and JWKS. At minimum, verify the signature, `iss`, `aud`, `exp`, and `nonce` before creating an application session. Use `sub` as the stable Authy account identifier. Request the `email` scope and reject the identity unless `email_verified` is exactly `true`; email addresses alone are not stable account identifiers.
+
+The access token can be sent as a bearer token to the advertised UserInfo endpoint when the client needs a fresh profile:
+
+```http
+GET /api/auth/oauth2/userinfo HTTP/1.1
+Host: auth.example.com
+Authorization: Bearer ACCESS_TOKEN
+```
+
+#### Application Catalog
+
+`OIDC_CLIENT_NAME`, `OIDC_CLIENT_DESCRIPTION`, and `OIDC_CLIENT_LAUNCH_URL` are optional. When a launch URL is present, Authy creates or updates a published OIDC application at startup and assigns it idempotently to current members of the first organization. The launch URL should point to the downstream application's sign-in entry point.
+
+If initial Authy setup has not created an organization yet, catalog provisioning is deferred. Restart Authy after setup or assign the application manually. Users added after the last startup can be assigned by an administrator or included during the next restart.
+
+#### Current Constraints
+
+- One environment-configured trusted downstream client is supported at a time.
+- Dynamic client registration is disabled.
+- Redirect URIs are exact-match and only one URI can be configured through the environment.
+- S256 PKCE is mandatory; the plain challenge method is rejected.
+- The client is responsible for validating tokens and verified-email claims.
+
+Multiple simultaneous platform integrations require extending Authy with persistent OIDC client management rather than sharing one client ID or secret between applications.
+
+#### Troubleshooting
+
+| Symptom                          | Check                                                                                               |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Discovery returns internal hosts | Set `BETTER_AUTH_URL` to the public HTTPS origin and restart Authy.                                 |
+| `invalid_client`                 | Confirm the client ID and secret match on both systems and all required Authy variables are set.    |
+| Redirect URI error               | Compare the complete URI, including scheme, port, path, and trailing slash.                         |
+| Authorization fails before login | Confirm the request uses `response_type=code`, includes `openid`, and sends an S256 code challenge. |
+| Token exchange fails             | Send the same redirect URI and PKCE verifier used for the authorization request.                    |
+| No application tile appears      | Set `OIDC_CLIENT_LAUNCH_URL`, complete organization setup, and restart Authy.                       |
+| User is rejected by the client   | Confirm Authy returns `email`, `email_verified: true`, and the requested profile claims.            |
 
 ## Email Delivery
 
