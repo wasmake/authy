@@ -15,6 +15,7 @@ export default apiHandler(async (req, res) => {
       memberships: {
         where: { organizationId: context.organizationId },
         include: {
+          organization: { select: { name: true, logo: true, greeting: true, primaryColor: true } },
           roles: {
             include: {
               role: { include: { permissions: { include: { permission: true } } } },
@@ -27,6 +28,7 @@ export default apiHandler(async (req, res) => {
   res.json({
     data: {
       ...user,
+      organization: user.memberships[0].organization,
       organizationId: context.organizationId,
       organizationRole: context.organizationRole,
     },

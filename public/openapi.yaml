@@ -47,6 +47,15 @@ paths:
           '302': { description: Redirect to application },
           '403': { $ref: '#/components/responses/Error' },
         }
+  /applications/{id}:
+    patch:
+      summary: Publish or unpublish an application (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Application updated } }
+    delete:
+      summary: Delete an application and its assignments (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: Application deleted } }
   /access-requests:
     get: { summary: List access requests, responses: { '200': { description: Request list } } }
     post:
@@ -74,6 +83,56 @@ paths:
         - { name: page, in: query, schema: { type: integer, minimum: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
       responses: { '200': { description: Paginated events } }
+  /admin/settings:
+    get:
+      {
+        summary: Read organization branding (admin),
+        responses: { '200': { description: Settings } },
+      }
+    patch:
+      {
+        summary: Update organization branding (admin),
+        responses: { '200': { description: Updated } },
+      }
+  /admin/users:
+    get:
+      {
+        summary: List users,
+        roles,
+        groups,
+        and app access (admin),
+        responses: { '200': { description: User directory } },
+      }
+    post:
+      {
+        summary: Add an existing account to the organization (admin),
+        responses: { '201': { description: Added } },
+      }
+  /admin/users/{id}:
+    patch:
+      summary: Update user standing, roles, groups, and apps (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: Remove a user from the organization (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: Removed } }
+  /admin/groups:
+    get:
+      {
+        summary: List groups and inherited app permissions (admin),
+        responses: { '200': { description: Groups } },
+      }
+    post: { summary: Create an RBAC group (admin), responses: { '201': { description: Created } } }
+  /admin/groups/{id}:
+    patch:
+      summary: Update group members and app permissions (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Updated } }
+    delete:
+      summary: Delete an RBAC group (admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: Deleted } }
 components:
   securitySchemes:
     sessionCookie: { type: apiKey, in: cookie, name: authy.session_token }

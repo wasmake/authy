@@ -99,6 +99,8 @@ model Organization {
   name String
   slug String @unique
   logo String?
+  greeting String @default("Welcome to your workspace")
+  primaryColor String @default("#6D5CE7")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   memberships Membership[]

@@ -9,6 +9,15 @@ export default apiHandler(async (req, res) => {
   if (!method(req, res, ['GET', 'POST'])) return;
   const context = await requireContext(req);
   if (req.method === 'GET') {
+    if (req.query.admin === 'true') {
+      requireAdmin(context);
+      const apps = await db.application.findMany({
+        where: { organizationId: context.organizationId },
+        orderBy: { name: 'asc' },
+      });
+      res.json({ data: apps });
+      return;
+    }
     const apps = await listAvailableApplications(context, req.query.marketplace === 'true');
     res.json({ data: apps });
     return;

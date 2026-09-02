@@ -21,10 +21,13 @@ export async function requireContext(req: NextApiRequest): Promise<AuthContext> 
       userId: session.user.id,
       ...(typeof requestedOrg === 'string' ? { organizationId: requestedOrg } : {}),
     },
+    include: { user: { select: { suspendedAt: true } } },
     orderBy: { role: 'asc' },
   });
   if (!membership)
     throw Object.assign(new Error('Organization access denied'), { statusCode: 403 });
+  if (membership.user.suspendedAt)
+    throw Object.assign(new Error('This account is suspended'), { statusCode: 403 });
   return {
     userId: session.user.id,
     organizationId: membership.organizationId,

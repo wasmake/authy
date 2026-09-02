@@ -8,7 +8,7 @@ describe('AppCard', () => {
         app={{ id: 'one', name: 'Console', type: 'LOCAL', launchUrl: 'https://example.test' }}
       />,
     );
-    expect(screen.getByRole('link', { name: /launch/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /open/i })).toHaveAttribute(
       'href',
       '/api/v1/applications/one/launch',
     );

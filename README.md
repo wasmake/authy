@@ -12,11 +12,23 @@ The complete platform is a deliberately simple Next.js modular monolith. The UI,
 
 ## Screens
 
+### Secure Sign-In
+
+The focused sign-in experience uses Better Auth credential sessions and keeps privileged application data out of the browser until authentication succeeds.
+
+![Authy secure sign-in screen](docs/screenshots/sign-in.png)
+
 ### User Portal
 
-Assigned third-party and internally owned applications are presented in a responsive launch dashboard. The demo workspace includes GitHub Enterprise, Grafana, and Notion test tiles.
+Assigned third-party and internally owned applications are presented in a responsive five-column launch dashboard with platform icons and recent activity. Press `Cmd+K` or `Ctrl+K` from any portal page to open the Spotlight-style application and settings search.
 
 ![Authy user portal with assigned application tiles](docs/screenshots/user-portal.png)
+
+### Marketplace Requests
+
+Members can discover published tools and send a contextual access request without leaving the portal.
+
+![Authy marketplace application request dialog](docs/screenshots/marketplace-request.png)
 
 ### Admin Portal
 
@@ -24,16 +36,38 @@ Administrators can monitor identity metrics and approve or deny tenant-scoped ac
 
 ![Authy admin portal with metrics and an access request](docs/screenshots/admin-portal.png)
 
+### Application Onboarding
+
+The integration wizard guides administrators through a platform template, details, connection protocol, publication policy, and final review. OIDC, SAML, local, and managed-link applications are supported.
+
+![Authy application integration onboarding wizard](docs/screenshots/application-wizard.png)
+
+### Users And Individual Access
+
+Each organization member can hold multiple RBAC roles and groups alongside direct application assignments. Administrators can also suspend accounts or change organization standing.
+
+![Authy user roles, groups, and application access management](docs/screenshots/user-management.png)
+
+### Groups And RBAC
+
+Groups bundle membership and inherited application permissions into reusable, auditable access profiles.
+
+![Authy RBAC group management](docs/screenshots/rbac-groups.png)
+
 ## Capabilities
 
 - Better Auth email/password sign-in, sign-out, recovery hooks, secure sessions, and HTTP-only cookies
 - Strict organization membership checks on every protected domain query
 - User and administrator capability separation with owner, admin, and member roles
 - Searchable application marketplace for OIDC, SAML, link, local, and internal applications
+- Spotlight-style global search for assigned applications, admin tools, and account settings
+- Guided application integration wizard with platform templates and protocol-aware validation
 - Direct and group application assignments with application-specific entitlements
-- Assigned application launching, favorites, and recent-use data models
+- Five-column application launcher with platform icons, favorites, and recent-use data
 - Access-request creation, review, approval, denial, and automatic assignment
-- Users, groups, roles, permissions, organizations, API keys, and audit-event data models
+- Full user access management across organization roles, multiple RBAC roles, groups, and apps
+- Group creation, editing, deletion, membership, and inherited application permissions
+- Organization greeting, logo, and primary-color settings with a live preview
 - One-time service credential display with hashed storage, rotation-ready metadata, and revocation
 - Tenant metrics for users, applications, requests, sign-ins, and security events
 - Resend transactional email adapter with a realistic console adapter for local development
@@ -101,8 +135,13 @@ src/
     api/auth/           Better Auth handler
     api/v1/             Versioned platform API
     admin.tsx           Administrator control plane
+    admin-applications  Integration catalog and onboarding wizard
+    admin-groups        Group membership and inherited permissions
+    admin-settings      Organization branding and greeting
+    admin-users         Identity roles, groups, and direct assignments
     index.tsx           Assigned application dashboard
     marketplace.tsx     Application discovery and requests
+    profile.tsx         User identity and session settings
 prisma/                 Schema, migrations, and deterministic seed
 tests/                  Jest, RTL, and Playwright suites
 ```
@@ -133,6 +172,9 @@ Available resources include:
 - `GET|POST /api/v1/api-keys` and `DELETE /api/v1/api-keys/{id}` for service credentials
 - `GET /api/v1/audit-events` for paginated tenant audit events
 - `GET /api/v1/admin/metrics` for administrator dashboard metrics
+- `GET|PATCH /api/v1/admin/settings` for tenant branding
+- `GET|POST /api/v1/admin/users` and `PATCH|DELETE /api/v1/admin/users/{id}` for member access
+- `GET|POST /api/v1/admin/groups` and `PATCH|DELETE /api/v1/admin/groups/{id}` for group RBAC
 
 The OpenAPI 3 document is served at [`/openapi.yaml`](public/openapi.yaml). OIDC application redirect URIs, scopes, and claims and practical SAML metadata are represented in the catalog model. Link and local applications use the access-checked launch endpoint. Production protocol signing and provider metadata exchange should be completed against the deployment's selected OIDC or SAML provider before enabling federation.
 

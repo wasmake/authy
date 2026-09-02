@@ -52,6 +52,7 @@ async function main() {
       ['Grafana', 'Production telemetry and service dashboards', 'https://grafana.com'],
       ['Notion', 'Team knowledge base and project documentation', 'https://notion.so'],
       ['Internal Console', 'Operate Acme services and environments', 'http://localhost:3000'],
+      ['Slack', 'Team communication and incident collaboration', 'https://app.slack.com'],
     ].map(async ([name, description, launchUrl], index) =>
       db.application.upsert({
         where: { id: `demo-app-${index}` },
@@ -76,6 +77,14 @@ async function main() {
       update: {},
       create: { applicationId: app.id, userId: member.id, entitlements: ['user'] },
     });
+  await db.appUsage.deleteMany({ where: { userId: member.id } });
+  await db.appUsage.createMany({
+    data: apps.slice(0, 2).map((app, index) => ({
+      applicationId: app.id,
+      userId: member.id,
+      usedAt: new Date(Date.now() - index * 3_600_000),
+    })),
+  });
   const permission = await db.permission.upsert({
     where: { key: 'applications:read' },
     update: {},
@@ -91,6 +100,65 @@ async function main() {
     update: {},
     create: { roleId: role.id, permissionId: permission.id },
   });
+  const developerRole = await db.role.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: 'Developer' } },
+    update: {},
+    create: {
+      organizationId: org.id,
+      name: 'Developer',
+      description: 'Engineering tools and development environments',
+    },
+  });
+  const memberMembership = await db.membership.findUniqueOrThrow({
+    where: { organizationId_userId: { organizationId: org.id, userId: member.id } },
+  });
+  for (const assignedRole of [role, developerRole]) {
+    await db.membershipRole.upsert({
+      where: {
+        membershipId_roleId: { membershipId: memberMembership.id, roleId: assignedRole.id },
+      },
+      update: {},
+      create: { membershipId: memberMembership.id, roleId: assignedRole.id },
+    });
+  }
+  const engineering = await db.group.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: 'Engineering' } },
+    update: {},
+    create: {
+      organizationId: org.id,
+      name: 'Engineering',
+      description: 'Product engineers with development and observability access',
+    },
+  });
+  const operations = await db.group.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: 'Operations' } },
+    update: {},
+    create: {
+      organizationId: org.id,
+      name: 'Operations',
+      description: 'On-call operators responsible for production services',
+    },
+  });
+  for (const group of [engineering, operations]) {
+    await db.groupMember.upsert({
+      where: { groupId_userId: { groupId: group.id, userId: member.id } },
+      update: {},
+      create: { groupId: group.id, userId: member.id },
+    });
+  }
+  for (const [group, app] of [
+    [engineering, apps[0]],
+    [engineering, apps[1]],
+    [operations, apps[1]],
+    [operations, apps[3]],
+    [engineering, apps[4]],
+  ] as const) {
+    await db.applicationAssignment.upsert({
+      where: { applicationId_groupId: { applicationId: app.id, groupId: group.id } },
+      update: {},
+      create: { applicationId: app.id, groupId: group.id, entitlements: ['member'] },
+    });
+  }
   console.info('Seeded demo accounts: admin@acme.test and user@acme.test / DemoPassword123!');
 }
 main().finally(() => db.$disconnect());
