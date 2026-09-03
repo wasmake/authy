@@ -1,6 +1,6 @@
 type QueryValue = string | string[] | undefined;
 
-const OIDC_QUERY_PARAMETERS = [
+const REQUIRED_OIDC_QUERY_PARAMETERS = [
   'client_id',
   'redirect_uri',
   'response_type',
@@ -8,11 +8,12 @@ const OIDC_QUERY_PARAMETERS = [
   'code_challenge',
   'code_challenge_method',
   'state',
-  'nonce',
 ] as const;
 
 export function getOidcContinuation(query: Record<string, QueryValue>): string | null {
-  const required = Object.fromEntries(OIDC_QUERY_PARAMETERS.map((key) => [key, query[key]]));
+  const required = Object.fromEntries(
+    REQUIRED_OIDC_QUERY_PARAMETERS.map((key) => [key, query[key]]),
+  );
   if (
     Object.values(required).some((value) => typeof value !== 'string' || !value) ||
     required.response_type !== 'code' ||
@@ -22,8 +23,9 @@ export function getOidcContinuation(query: Record<string, QueryValue>): string |
   }
 
   const parameters = new URLSearchParams();
-  for (const key of OIDC_QUERY_PARAMETERS) {
+  for (const key of REQUIRED_OIDC_QUERY_PARAMETERS) {
     parameters.set(key, required[key] as string);
   }
+  if (typeof query.nonce === 'string' && query.nonce) parameters.set('nonce', query.nonce);
   return `/api/auth/oauth2/authorize?${parameters.toString()}`;
 }

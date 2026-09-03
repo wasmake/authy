@@ -24,6 +24,14 @@ describe('OIDC sign-in continuation', () => {
     expect(getOidcContinuation({ ...validQuery, code_challenge: undefined })).toBeNull();
   });
 
+  it('preserves valid PKCE requests that omit the optional nonce', () => {
+    const continuation = getOidcContinuation({ ...validQuery, nonce: undefined });
+    const url = new URL(continuation!, 'https://auth.example.com');
+
+    expect(url.searchParams.get('client_id')).toBe(validQuery.client_id);
+    expect(url.searchParams.has('nonce')).toBe(false);
+  });
+
   it('rejects non-code and non-S256 requests', () => {
     expect(getOidcContinuation({ ...validQuery, response_type: 'token' })).toBeNull();
     expect(getOidcContinuation({ ...validQuery, code_challenge_method: 'plain' })).toBeNull();
