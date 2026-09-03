@@ -36,6 +36,16 @@ async function main() {
   }
 
   for (const client of clients) {
+    await db.application.deleteMany({
+      where: {
+        type: 'OIDC',
+        name: client.name,
+        launchUrl: client.launchUrl,
+        redirectUris: { has: client.redirectUri },
+        clientId: { not: client.clientId },
+      },
+    });
+
     const existing = await db.application.findUnique({
       where: { clientId: client.clientId },
     });
