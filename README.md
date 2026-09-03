@@ -95,7 +95,7 @@ Open [http://localhost:3000](http://localhost:3000). A fresh database redirects 
 
 The application container applies committed migrations before starting. PostgreSQL data is retained in the `authy-postgres` Docker volume.
 
-For Dokploy, select `docker-compose.dokploy.yml`, expose the `app` service on container port `3000`, and configure `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` in the Compose environment. Add the `OIDC_CLIENT_*` variables described below when Authy will provide sign-in to another application. The deployment file intentionally publishes no host ports because Dokploy routes traffic through Traefik.
+For Dokploy, select `docker-compose.dokploy.yml`, expose the `app` service on container port `3000`, and configure `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` in the Compose environment. Add the legacy `OIDC_CLIENT_*` variables and/or `OIDC_CLIENTS_JSON` described below when Authy will provide sign-in to other applications. The deployment file intentionally publishes no host ports because Dokploy routes traffic through Traefik.
 
 ## Local Development
 
@@ -120,7 +120,7 @@ Google Workspace can be restricted with a hosted-domain hint. Microsoft and Acti
 
 ### Downstream OIDC Integration
 
-Authy can act as an OpenID Connect provider for one trusted confidential client. It implements the authorization-code flow with S256 PKCE, signed ID tokens, UserInfo, refresh tokens, and discovery. Dynamic client registration is disabled; the operator registers the trusted client through environment variables.
+Authy can act as an OpenID Connect provider for trusted confidential clients. It implements the authorization-code flow with S256 PKCE, signed ID tokens, UserInfo, refresh tokens, and discovery. Dynamic client registration is disabled; the operator registers trusted clients through environment variables.
 
 #### Configure Authy
 
@@ -140,9 +140,17 @@ OIDC_CLIENT_LAUNCH_URL=https://platform.example.com/sign-in
 
 Generate a client secret with a cryptographically secure tool, for example `openssl rand -hex 32`. Configure the same client ID and secret in the downstream application, but never expose the secret to browser code or commit it to source control.
 
+Keep the legacy variables above for the existing client. Register additional clients with a JSON array; each object requires `clientId`, a `clientSecret` of at least 32 characters, and one HTTP(S) `redirectUri`. `name`, `description` (up to 500 characters), and an HTTP(S) `launchUrl` are optional:
+
+```dotenv
+OIDC_CLIENTS_JSON=[{"clientId":"reports","clientSecret":"replace-with-at-least-32-random-characters","redirectUri":"https://reports.example.com/auth/callback","name":"Reports","launchUrl":"https://reports.example.com/sign-in"}]
+```
+
+Client IDs must be unique across the JSON array and the legacy `OIDC_CLIENT_ID`. Invalid JSON or invalid/duplicate clients stop Authy during startup.
+
 `OIDC_REDIRECT_URI` is matched exactly. Its scheme, host, port, path, query, and trailing slash must match the URI sent in authorization and token requests. Use an HTTPS callback in production.
 
-Restart Authy after changing these variables. The OIDC provider is enabled only when `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` are all present.
+Restart Authy after changing these variables. The legacy client is enabled only when `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URI` are all present; validated `OIDC_CLIENTS_JSON` clients are enabled independently.
 
 #### Discover Endpoints
 
@@ -178,9 +186,9 @@ Use these values in a standards-compatible OIDC client library:
 | -------------------- | -------------------------------------------------------------- |
 | Issuer               | The public `BETTER_AUTH_URL` value                             |
 | Discovery URL        | `${BETTER_AUTH_URL}/api/auth/.well-known/openid-configuration` |
-| Client ID            | The `OIDC_CLIENT_ID` value                                     |
-| Client secret        | The `OIDC_CLIENT_SECRET` value                                 |
-| Redirect URI         | The exact `OIDC_REDIRECT_URI` value                            |
+| Client ID            | The selected client's configured client ID                     |
+| Client secret        | The selected client's configured client secret                 |
+| Redirect URI         | The selected client's exact configured redirect URI            |
 | Response type        | `code`                                                         |
 | Scopes               | `openid profile email`                                         |
 | PKCE method          | `S256`                                                         |
@@ -202,19 +210,17 @@ Authorization: Bearer ACCESS_TOKEN
 
 #### Application Catalog
 
-`OIDC_CLIENT_NAME`, `OIDC_CLIENT_DESCRIPTION`, and `OIDC_CLIENT_LAUNCH_URL` are optional. When a launch URL is present, Authy creates or updates a published OIDC application at startup and assigns it idempotently to current members of the first organization. The launch URL should point to the downstream application's sign-in entry point.
+Catalog metadata is optional for both legacy and JSON clients. For every client with a launch URL, Authy creates or updates a published OIDC application at startup and assigns it idempotently to members of its existing organization, or the first organization for a new application. The launch URL should point to the downstream application's sign-in entry point.
 
 If initial Authy setup has not created an organization yet, catalog provisioning is deferred. Restart Authy after setup or assign the application manually. Users added after the last startup can be assigned by an administrator or included during the next restart.
 
 #### Current Constraints
 
-- One environment-configured trusted downstream client is supported at a time.
+- Trusted clients are environment-configured; there is no persistent OIDC client-management UI.
 - Dynamic client registration is disabled.
-- Redirect URIs are exact-match and only one URI can be configured through the environment.
+- Redirect URIs are exact-match and each configured client supports one URI.
 - S256 PKCE is mandatory; the plain challenge method is rejected.
 - The client is responsible for validating tokens and verified-email claims.
-
-Multiple simultaneous platform integrations require extending Authy with persistent OIDC client management rather than sharing one client ID or secret between applications.
 
 #### Troubleshooting
 

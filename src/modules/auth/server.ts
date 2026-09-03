@@ -14,19 +14,28 @@ export async function getAuth() {
     orderBy: { updatedAt: 'desc' },
   });
   const socialProviders: SocialProviders = {};
-  const oidcClient =
-    env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URI
-      ? {
-          clientId: env.OIDC_CLIENT_ID,
-          clientSecret: env.OIDC_CLIENT_SECRET,
-          type: 'web' as const,
-          name: env.OIDC_CLIENT_NAME,
-          redirectURLs: [env.OIDC_REDIRECT_URI],
-          metadata: null,
-          disabled: false,
-          skipConsent: true,
-        }
-      : undefined;
+  const oidcClients = env.OIDC_CLIENTS.map((client) => ({
+    clientId: client.clientId,
+    clientSecret: client.clientSecret,
+    type: 'web' as const,
+    name: client.name ?? 'OIDC Application',
+    redirectURLs: [client.redirectUri],
+    metadata: null,
+    disabled: false,
+    skipConsent: true,
+  }));
+  if (env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URI) {
+    oidcClients.unshift({
+      clientId: env.OIDC_CLIENT_ID,
+      clientSecret: env.OIDC_CLIENT_SECRET,
+      type: 'web' as const,
+      name: env.OIDC_CLIENT_NAME,
+      redirectURLs: [env.OIDC_REDIRECT_URI],
+      metadata: null,
+      disabled: false,
+      skipConsent: true,
+    });
+  }
   if (configured) {
     try {
       const provider = {
@@ -117,7 +126,7 @@ export async function getAuth() {
         requirePKCE: true,
         allowPlainCodeChallengeMethod: false,
         useJWTPlugin: true,
-        trustedClients: oidcClient ? [oidcClient] : [],
+        trustedClients: oidcClients,
       }),
       jwt({ disableSettingJwtHeader: true }),
     ],
