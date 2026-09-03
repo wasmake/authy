@@ -1,6 +1,7 @@
 import { ArrowUpRight, Clock, Star } from 'lucide-react';
 
 import { AppIcon } from '@/components/app-icon';
+import { applicationLaunchUrl, openApplicationInFocusedTab } from '@/modules/applications/launch';
 
 export type AppView = {
   id: string;
@@ -53,7 +54,15 @@ export function AppCard({
           Request access
         </button>
       ) : (
-        <a className="button mt-4 w-full gap-1.5" href={`/api/v1/applications/${app.id}/launch`}>
+        <a
+          className="button mt-4 w-full gap-1.5"
+          href={applicationLaunchUrl(app.id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => {
+            if (openApplicationInFocusedTab(app.id)) event.preventDefault();
+          }}
+        >
           Open <ArrowUpRight size={15} />
         </a>
       )}

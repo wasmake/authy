@@ -4,6 +4,7 @@ import { AppCard, type AppView } from '@/components/app-card';
 import { AppIcon } from '@/components/app-icon';
 import { Layout } from '@/components/layout';
 import { useApi } from '@/hooks/use-api';
+import { applicationLaunchUrl, openApplicationInFocusedTab } from '@/modules/applications/launch';
 
 type Me = { name: string; organizationRole: string; organization: { greeting: string } };
 
@@ -39,9 +40,14 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
             {recent.map((app) => (
               <a
-                href={`/api/v1/applications/${app.id}/launch`}
+                href={applicationLaunchUrl(app.id)}
                 key={app.id}
                 className="card flex items-center gap-3 p-3 transition hover:border-primary/30 hover:shadow-md"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  if (openApplicationInFocusedTab(app.id)) event.preventDefault();
+                }}
               >
                 <AppIcon name={app.name} compact />
                 <span className="min-w-0">

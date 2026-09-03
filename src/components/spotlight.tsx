@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { AppIcon } from '@/components/app-icon';
 import { useApi } from '@/hooks/use-api';
+import { openApplicationInFocusedTab } from '@/modules/applications/launch';
 
 type SearchApp = { id: string; name: string; description?: string | null; type: string };
 type Destination = { label: string; detail: string; href: string; admin?: boolean };
@@ -80,8 +81,13 @@ export function Spotlight({ admin }: { admin: boolean }) {
   function navigate(href: string) {
     setOpen(false);
     setQuery('');
-    if (href.startsWith('/api/')) window.location.assign(href);
-    else void router.push(href);
+    void router.push(href);
+  }
+
+  function launchApplication(applicationId: string) {
+    setOpen(false);
+    setQuery('');
+    openApplicationInFocusedTab(applicationId);
   }
 
   return (
@@ -137,7 +143,7 @@ export function Spotlight({ admin }: { admin: boolean }) {
                       label={app.name}
                       detail={`Launch ${app.type.toLowerCase()} application`}
                       icon={<AppIcon name={app.name} compact />}
-                      onClick={() => navigate(`/api/v1/applications/${app.id}/launch`)}
+                      onClick={() => launchApplication(app.id)}
                     />
                   ))}
                 </ResultGroup>
