@@ -24,6 +24,7 @@ COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
 COPY --from=builder --chown=app:app /app/public ./public
 COPY --from=builder --chown=app:app /app/prisma ./prisma
+COPY --from=builder --chown=app:app /app/node_modules ./node_modules
 USER app
 EXPOSE 3000
 CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node prisma/preconfigure-oidc-client.mjs && node server.js"]
