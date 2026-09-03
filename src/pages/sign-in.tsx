@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import { authClient } from '@/modules/auth/client';
+import { getOidcContinuation } from '@/modules/auth/oidc-continuation';
 
 type AuthMethods = {
   passwordEnabled: boolean;
@@ -22,6 +23,8 @@ export default function SignIn() {
   const [checkingSetup, setCheckingSetup] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const oidcContinuation = getOidcContinuation(router.query);
+  const authenticatedDestination = oidcContinuation ?? '/';
 
   useEffect(() => {
     let active = true;
@@ -42,8 +45,10 @@ export default function SignIn() {
   }, [router]);
 
   useEffect(() => {
-    if (!session.isPending && session.data) void router.replace('/');
-  }, [router, session.data, session.isPending]);
+    if (!session.isPending && session.data && router.isReady) {
+      window.location.assign(authenticatedDestination);
+    }
+  }, [authenticatedDestination, router.isReady, session.data, session.isPending]);
 
   useEffect(() => {
     const callbackError = router.query.error;
@@ -81,6 +86,7 @@ export default function SignIn() {
     const result = await authClient.signIn.email({
       email,
       password: String(form.get('password')),
+      callbackURL: authenticatedDestination,
     });
     if (result.error) {
       setError(result.error.message ?? 'Unable to sign in');
@@ -91,7 +97,7 @@ export default function SignIn() {
       window.location.assign(result.data.url);
       return;
     }
-    await router.push('/');
+    window.location.assign(authenticatedDestination);
   }
 
   async function signInWithSso() {
@@ -100,8 +106,8 @@ export default function SignIn() {
     setError('');
     const result = await authClient.signIn.social({
       provider: methods.provider.authProvider,
-      callbackURL: '/',
-      errorCallbackURL: '/sign-in',
+      callbackURL: authenticatedDestination,
+      errorCallbackURL: oidcContinuation ? router.asPath : '/sign-in',
       loginHint: email,
     });
     if (result.error) {
