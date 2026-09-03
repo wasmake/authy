@@ -1,11 +1,8 @@
-import { z } from 'zod';
-
 import { apiHandler, method, parseBody } from '@/lib/api';
 import { db } from '@/lib/db';
+import { applicationUpdateSchema } from '@/modules/applications/schemas';
 import { audit } from '@/modules/audit/service';
 import { requireAdmin, requireContext } from '@/modules/auth/context';
-
-const updateSchema = z.object({ isPublished: z.boolean() }).strict();
 
 export default apiHandler(async (req, res) => {
   if (!method(req, res, ['PATCH', 'DELETE'])) return;
@@ -30,7 +27,7 @@ export default apiHandler(async (req, res) => {
     return;
   }
 
-  const input = parseBody(updateSchema, req);
+  const input = parseBody(applicationUpdateSchema, req);
   const updated = await db.application.update({ where: { id }, data: input });
   await audit({
     organizationId: context.organizationId,

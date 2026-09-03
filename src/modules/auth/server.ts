@@ -14,28 +14,43 @@ export async function getAuth() {
     orderBy: { updatedAt: 'desc' },
   });
   const socialProviders: SocialProviders = {};
-  const oidcClients = env.OIDC_CLIENTS.map((client) => ({
+  const configuredOidcClients = env.OIDC_CLIENTS.map((client) => ({
+    ...client,
+    redirectURLs: [client.redirectUri],
+  }));
+  if (env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URI) {
+    configuredOidcClients.unshift({
+      clientId: env.OIDC_CLIENT_ID,
+      clientSecret: env.OIDC_CLIENT_SECRET,
+      name: env.OIDC_CLIENT_NAME,
+      redirectUri: env.OIDC_REDIRECT_URI,
+      redirectURLs: [env.OIDC_REDIRECT_URI],
+    });
+  }
+  const catalogApplications = configuredOidcClients.length
+    ? await db.application.findMany({
+        where: {
+          clientId: { in: configuredOidcClients.map((client) => client.clientId) },
+          type: 'OIDC',
+        },
+        select: { clientId: true, name: true, redirectUris: true },
+      })
+    : [];
+  const catalogByClientId = new Map(
+    catalogApplications.map((application) => [application.clientId, application]),
+  );
+  const oidcClients = configuredOidcClients.map((client) => ({
     clientId: client.clientId,
     clientSecret: client.clientSecret,
     type: 'web' as const,
-    name: client.name ?? 'OIDC Application',
-    redirectURLs: [client.redirectUri],
+    name: catalogByClientId.get(client.clientId)?.name ?? client.name ?? 'OIDC Application',
+    redirectURLs: catalogByClientId.get(client.clientId)?.redirectUris.length
+      ? catalogByClientId.get(client.clientId)!.redirectUris
+      : client.redirectURLs,
     metadata: null,
     disabled: false,
     skipConsent: true,
   }));
-  if (env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && env.OIDC_REDIRECT_URI) {
-    oidcClients.unshift({
-      clientId: env.OIDC_CLIENT_ID,
-      clientSecret: env.OIDC_CLIENT_SECRET,
-      type: 'web' as const,
-      name: env.OIDC_CLIENT_NAME,
-      redirectURLs: [env.OIDC_REDIRECT_URI],
-      metadata: null,
-      disabled: false,
-      skipConsent: true,
-    });
-  }
   if (configured) {
     try {
       const provider = {

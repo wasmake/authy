@@ -210,7 +210,7 @@ Authorization: Bearer ACCESS_TOKEN
 
 #### Application Catalog
 
-Catalog metadata is optional for both legacy and JSON clients. For every client with a launch URL, Authy creates or updates a published OIDC application at startup and assigns it idempotently to members of its existing organization, or the first organization for a new application. The launch URL should point to the downstream application's sign-in entry point.
+Catalog metadata is optional for both legacy and JSON clients. For every client with a launch URL, Authy creates a published OIDC application when one does not already exist and assigns it idempotently to members of its existing organization, or the first organization for a new application. Existing catalog metadata remains administrator-editable and is not overwritten on restart. For configured OIDC clients, edited names and redirect URIs take effect in the provider while client IDs and secrets remain deployment-managed. The launch URL should point to the downstream application's sign-in entry point.
 
 If initial Authy setup has not created an organization yet, catalog provisioning is deferred. Restart Authy after setup or assign the application manually. Users added after the last startup can be assigned by an administrator or included during the next restart.
 

@@ -1,17 +1,36 @@
 import { z } from 'zod';
 
+const httpUrl = z
+  .string()
+  .url()
+  .refine((value) => ['http:', 'https:'].includes(new URL(value).protocol), {
+    message: 'Must use the http or https protocol',
+  });
+
 export const applicationSchema = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(500).optional(),
   type: z.enum(['OIDC', 'SAML', 'LINK', 'LOCAL']),
-  launchUrl: z.string().url().optional(),
-  redirectUris: z.array(z.string().url()).max(20).default([]),
+  launchUrl: httpUrl.optional(),
+  redirectUris: z.array(httpUrl).max(20).default([]),
   scopes: z
     .array(z.string().regex(/^[a-z][a-z0-9:_-]*$/))
     .max(30)
     .default(['openid', 'profile', 'email']),
   isPublished: z.boolean().default(false),
 });
+
+export const applicationUpdateSchema = z
+  .object({
+    name: applicationSchema.shape.name.optional(),
+    description: applicationSchema.shape.description,
+    launchUrl: applicationSchema.shape.launchUrl,
+    redirectUris: applicationSchema.shape.redirectUris.removeDefault().optional(),
+    scopes: applicationSchema.shape.scopes.removeDefault().optional(),
+    isPublished: applicationSchema.shape.isPublished.removeDefault().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'Provide at least one field to update');
 
 export const assignmentSchema = z
   .object({

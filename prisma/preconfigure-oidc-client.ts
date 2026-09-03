@@ -50,31 +50,22 @@ async function main() {
       return;
     }
 
-    const application = await db.application.upsert({
-      where: { clientId: client.clientId },
-      update: {
-        name: client.name,
-        description: client.description,
-        type: 'OIDC',
-        launchUrl: client.launchUrl,
-        redirectUris: [client.redirectUri],
-        scopes: ['openid', 'profile', 'email'],
-        claims: { email_verified: true },
-        isPublished: true,
-      },
-      create: {
-        organizationId: organization.id,
-        name: client.name,
-        description: client.description,
-        type: 'OIDC',
-        launchUrl: client.launchUrl,
-        clientId: client.clientId,
-        redirectUris: [client.redirectUri],
-        scopes: ['openid', 'profile', 'email'],
-        claims: { email_verified: true },
-        isPublished: true,
-      },
-    });
+    const application =
+      existing ??
+      (await db.application.create({
+        data: {
+          organizationId: organization.id,
+          name: client.name,
+          description: client.description,
+          type: 'OIDC',
+          launchUrl: client.launchUrl,
+          clientId: client.clientId,
+          redirectUris: [client.redirectUri],
+          scopes: ['openid', 'profile', 'email'],
+          claims: { email_verified: true },
+          isPublished: true,
+        },
+      }));
 
     const memberships = await db.membership.findMany({
       where: { organizationId: application.organizationId },

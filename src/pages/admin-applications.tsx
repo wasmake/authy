@@ -13,6 +13,7 @@ import {
   KeyRound,
   Link2,
   MessageSquare,
+  Pencil,
   Plus,
   ShieldCheck,
   Trash2,
@@ -144,8 +145,12 @@ export default function AdminApplications() {
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Application | null>(null);
+  const [editing, setEditing] = useState<Application | null>(null);
+  const firstStep = editing ? 1 : 0;
+  const activeSteps = editing ? steps.slice(1) : steps;
 
   function openWizard() {
+    setEditing(null);
     setWizardOpen(true);
     setStep(0);
     setForm(initialForm);
@@ -154,8 +159,28 @@ export default function AdminApplications() {
     setCreated(null);
   }
 
+  function openEditor(application: Application) {
+    setEditing(application);
+    setWizardOpen(true);
+    setStep(1);
+    setForm({
+      templateId: 'custom',
+      name: application.name,
+      description: application.description ?? '',
+      type: application.type,
+      launchUrl: application.launchUrl ?? '',
+      redirectUris: application.redirectUris?.length ? application.redirectUris : [''],
+      scopes: application.scopes?.join(' ') ?? '',
+      isPublished: application.isPublished,
+    });
+    setErrors({});
+    setSubmitError('');
+    setCreated(null);
+  }
+
   function closeWizard() {
     setWizardOpen(false);
+    setEditing(null);
     setCreated(null);
     setSubmitError('');
   }
@@ -212,10 +237,10 @@ export default function AdminApplications() {
   function previousStep() {
     setErrors({});
     setSubmitError('');
-    setStep((current) => Math.max(current - 1, 0));
+    setStep((current) => Math.max(current - 1, firstStep));
   }
 
-  async function createApplication(event: FormEvent<HTMLFormElement>) {
+  async function saveApplication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (step < steps.length - 1) {
       nextStep();
@@ -232,38 +257,58 @@ export default function AdminApplications() {
 
     setSubmitting(true);
     try {
-      const response = await fetch('/api/v1/applications', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          description: form.description.trim() || undefined,
-          type: form.type,
-          launchUrl: form.launchUrl.trim(),
-          redirectUris:
-            form.type === 'OIDC' ? form.redirectUris.map((uri) => uri.trim()).filter(Boolean) : [],
-          scopes: form.type === 'OIDC' ? parseScopes(form.scopes) : [],
-          isPublished: form.isPublished,
-        }),
-      });
+      const payload = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        launchUrl: form.launchUrl.trim(),
+        redirectUris:
+          form.type === 'OIDC' ? form.redirectUris.map((uri) => uri.trim()).filter(Boolean) : [],
+        scopes: form.type === 'OIDC' ? parseScopes(form.scopes) : [],
+        isPublished: form.isPublished,
+        ...(!editing ? { type: form.type } : {}),
+      };
+      const response = await fetch(
+        editing ? `/api/v1/applications/${editing.id}` : '/api/v1/applications',
+        {
+          method: editing ? 'PATCH' : 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        },
+      );
       const body = (await response.json()) as {
         data?: Application;
         error?: { message?: string };
       };
       if (!response.ok || !body.data) {
-        throw new Error(body.error?.message ?? 'Unable to create the integration.');
-      }
-
-      setCreated(body.data);
-      if (body.data.isPublished) {
-        applications.setData(
-          [...(applications.data ?? []), body.data].sort((left, right) =>
-            left.name.localeCompare(right.name),
-          ),
+        throw new Error(
+          body.error?.message ??
+            (editing ? 'Unable to update the integration.' : 'Unable to create the integration.'),
         );
       }
+
+      if (editing) {
+        applications.setData((current) =>
+          current
+            ?.map((application) => (application.id === body.data?.id ? body.data : application))
+            .sort((left, right) => left.name.localeCompare(right.name)),
+        );
+        closeWizard();
+        return;
+      }
+      setCreated(body.data);
+      applications.setData(
+        [...(applications.data ?? []), body.data].sort((left, right) =>
+          left.name.localeCompare(right.name),
+        ),
+      );
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Unable to create the integration.');
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : editing
+            ? 'Unable to update the integration.'
+            : 'Unable to create the integration.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -292,7 +337,7 @@ export default function AdminApplications() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[.14em] text-primary">
-                  New application
+                  {editing ? 'Edit application' : 'New application'}
                 </p>
                 <h2 id="wizard-title" className="mt-1 text-xl font-semibold">
                   {created ? 'Integration created' : steps[step]}
@@ -310,38 +355,44 @@ export default function AdminApplications() {
 
             {!created && (
               <div className="mt-6">
-                <ol className="grid grid-cols-5 gap-1" aria-label="Application setup progress">
-                  {steps.map((label, index) => (
-                    <li
-                      key={label}
-                      className={`flex min-w-0 items-center gap-2 text-xs font-medium ${
-                        index <= step ? 'text-primary' : 'text-slate-400'
-                      }`}
-                      aria-current={index === step ? 'step' : undefined}
-                    >
-                      <span
-                        className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border ${
-                          index < step
-                            ? 'border-primary bg-primary text-white'
-                            : index === step
-                              ? 'border-primary bg-card'
-                              : 'border-border bg-card'
+                <ol
+                  className={`grid gap-1 ${editing ? 'grid-cols-4' : 'grid-cols-5'}`}
+                  aria-label="Application setup progress"
+                >
+                  {activeSteps.map((label, index) => {
+                    const actualIndex = index + firstStep;
+                    return (
+                      <li
+                        key={label}
+                        className={`flex min-w-0 items-center gap-2 text-xs font-medium ${
+                          actualIndex <= step ? 'text-primary' : 'text-slate-400'
                         }`}
+                        aria-current={actualIndex === step ? 'step' : undefined}
                       >
-                        {index < step ? <Check size={14} /> : index + 1}
-                      </span>
-                      <span className="hidden truncate md:block">{label}</span>
-                    </li>
-                  ))}
+                        <span
+                          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border ${
+                            actualIndex < step
+                              ? 'border-primary bg-primary text-white'
+                              : actualIndex === step
+                                ? 'border-primary bg-card'
+                                : 'border-border bg-card'
+                          }`}
+                        >
+                          {actualIndex < step ? <Check size={14} /> : index + 1}
+                        </span>
+                        <span className="hidden truncate md:block">{label}</span>
+                      </li>
+                    );
+                  })}
                 </ol>
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-border">
                   <div
                     className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${((step + 1) / steps.length) * 100}%` }}
+                    style={{ width: `${((step - firstStep + 1) / activeSteps.length) * 100}%` }}
                   />
                 </div>
                 <p className="sr-only" aria-live="polite">
-                  Step {step + 1} of {steps.length}: {steps[step]}
+                  Step {step - firstStep + 1} of {activeSteps.length}: {steps[step]}
                 </p>
               </div>
             )}
@@ -350,7 +401,7 @@ export default function AdminApplications() {
           {created ? (
             <SuccessPanel application={created} onAnother={openWizard} onClose={closeWizard} />
           ) : (
-            <form onSubmit={createApplication} noValidate>
+            <form onSubmit={saveApplication} noValidate>
               <div className="min-h-[390px] p-5 sm:p-8">
                 {Object.keys(errors).length > 0 && (
                   <div
@@ -364,7 +415,14 @@ export default function AdminApplications() {
                   <TemplateStep selected={form.templateId} onSelect={chooseTemplate} />
                 )}
                 {step === 1 && <DetailsStep form={form} setForm={setForm} errors={errors} />}
-                {step === 2 && <ConnectionStep form={form} setForm={setForm} errors={errors} />}
+                {step === 2 && (
+                  <ConnectionStep
+                    form={form}
+                    setForm={setForm}
+                    errors={errors}
+                    lockType={Boolean(editing)}
+                  />
+                )}
                 {step === 3 && <AccessStep form={form} setForm={setForm} />}
                 {step === 4 && (
                   <ReviewStep form={form} selectedTemplate={selectedTemplate ?? templates[5]} />
@@ -376,7 +434,7 @@ export default function AdminApplications() {
                   className="button-secondary gap-2"
                   type="button"
                   onClick={previousStep}
-                  disabled={step === 0 || submitting}
+                  disabled={step === firstStep || submitting}
                 >
                   <ArrowLeft size={16} /> Back
                 </button>
@@ -389,10 +447,15 @@ export default function AdminApplications() {
                   <button className="button gap-2" type="submit" disabled={submitting}>
                     {step === steps.length - 1 ? (
                       submitting ? (
-                        'Creating...'
+                        editing ? (
+                          'Saving...'
+                        ) : (
+                          'Creating...'
+                        )
                       ) : (
                         <>
-                          Create integration <CheckCircle2 size={16} />
+                          {editing ? 'Save changes' : 'Create integration'}{' '}
+                          <CheckCircle2 size={16} />
                         </>
                       )
                     ) : (
@@ -448,6 +511,7 @@ export default function AdminApplications() {
                 application={application}
                 key={application.id}
                 onAction={updateApplication}
+                onEdit={openEditor}
               />
             ))}
           </div>
@@ -456,7 +520,7 @@ export default function AdminApplications() {
             <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-muted text-primary">
               <Box size={21} />
             </span>
-            <h3 className="mt-4 font-semibold">No published integrations yet</h3>
+            <h3 className="mt-4 font-semibold">No integrations yet</h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
               Add an application and publish it when you are ready for members to discover it.
             </p>
@@ -584,10 +648,12 @@ function ConnectionStep({
   form,
   setForm,
   errors,
+  lockType = false,
 }: {
   form: WizardForm;
   setForm: (form: WizardForm) => void;
   errors: FieldErrors;
+  lockType?: boolean;
 }) {
   const connectionTypes: {
     type: ApplicationType;
@@ -622,9 +688,9 @@ function ConnectionStep({
             return (
               <label
                 htmlFor={`connection-${connection.type}`}
-                className={`cursor-pointer rounded-xl border p-4 ${
-                  active ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border'
-                }`}
+                className={`rounded-xl border p-4 ${
+                  lockType ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                } ${active ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border'}`}
                 key={connection.type}
               >
                 <span className="sr-only">Connection method option</span>
@@ -635,6 +701,7 @@ function ConnectionStep({
                   name="connection-type"
                   value={connection.type}
                   checked={active}
+                  disabled={lockType}
                   onChange={() => setForm({ ...form, type: connection.type })}
                 />
                 <span className="flex items-center gap-3">
@@ -650,6 +717,11 @@ function ConnectionStep({
             );
           })}
         </div>
+        {lockType && (
+          <p className="mt-3 text-xs text-slate-500">
+            The connection method and application identity cannot be changed after creation.
+          </p>
+        )}
       </fieldset>
 
       <div className="mt-7 max-w-3xl border-t border-border pt-6">
@@ -955,9 +1027,11 @@ function SuccessPanel({
 function ApplicationCard({
   application,
   onAction,
+  onEdit,
 }: {
   application: Application;
   onAction: (application: Application, action: 'toggle' | 'delete') => void;
+  onEdit: (application: Application) => void;
 }) {
   const Icon = applicationIcon(application);
   return (
@@ -982,6 +1056,13 @@ function ApplicationCard({
           {application.isPublished ? 'Published' : 'Private'}
         </span>
         <span className="flex items-center gap-2">
+          <button
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            type="button"
+            onClick={() => onEdit(application)}
+          >
+            <Pencil size={13} /> Edit
+          </button>
           <button
             className="font-medium text-primary hover:underline"
             type="button"

@@ -1,6 +1,7 @@
 import {
   accessRequestSchema,
   applicationSchema,
+  applicationUpdateSchema,
   assignmentSchema,
 } from '@/modules/applications/schemas';
 describe('application validation', () => {
@@ -13,6 +14,33 @@ describe('application validation', () => {
         scopes: ['bad scope'],
       }),
     ).toThrow();
+    expect(() =>
+      applicationUpdateSchema.parse({ redirectUris: ['file:///tmp/callback'] }),
+    ).toThrow();
+  });
+  it('accepts metadata and visibility updates for published applications', () => {
+    expect(
+      applicationUpdateSchema.parse({
+        name: 'Updated app',
+        description: 'Updated after publication',
+        launchUrl: 'https://app.example.com',
+        redirectUris: ['https://app.example.com/auth/callback'],
+        scopes: ['openid', 'email'],
+        isPublished: true,
+      }),
+    ).toEqual({
+      name: 'Updated app',
+      description: 'Updated after publication',
+      launchUrl: 'https://app.example.com',
+      redirectUris: ['https://app.example.com/auth/callback'],
+      scopes: ['openid', 'email'],
+      isPublished: true,
+    });
+  });
+  it('rejects empty updates and protected fields', () => {
+    expect(() => applicationUpdateSchema.parse({})).toThrow();
+    expect(() => applicationUpdateSchema.parse({ clientId: 'replacement' })).toThrow();
+    expect(() => applicationUpdateSchema.parse({ type: 'LINK' })).toThrow();
   });
   it('requires exactly one assignment principal', () => {
     expect(() => assignmentSchema.parse({ entitlements: [] })).toThrow();
