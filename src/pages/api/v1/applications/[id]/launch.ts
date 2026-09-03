@@ -1,5 +1,7 @@
 import { apiHandler, method } from '@/lib/api';
 import { db } from '@/lib/db';
+import { env } from '@/lib/env';
+import { applicationLaunchDestination } from '@/modules/applications/launch-destination';
 import { hasApplicationAccess } from '@/modules/applications/service';
 import { audit } from '@/modules/audit/service';
 import { requireContext } from '@/modules/auth/context';
@@ -23,5 +25,8 @@ export default apiHandler(async (req, res) => {
     targetType: 'application',
     targetId: id,
   });
-  res.redirect(302, app.launchUrl);
+  res.redirect(
+    302,
+    applicationLaunchDestination({ launchUrl: app.launchUrl, type: app.type }, env.BETTER_AUTH_URL),
+  );
 });
