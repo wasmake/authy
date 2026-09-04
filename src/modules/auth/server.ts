@@ -81,6 +81,17 @@ export async function getAuth() {
     secret: env.BETTER_AUTH_SECRET,
     database: prismaAdapter(db, { provider: 'postgresql' }),
     databaseHooks: {
+      account: {
+        update: {
+          after: async (account) => {
+            if (account.providerId !== 'credential' || !account.password) return;
+            await db.user.updateMany({
+              where: { id: account.userId, mustChangePassword: true },
+              data: { mustChangePassword: false },
+            });
+          },
+        },
+      },
       session: {
         create: {
           before: async (session, context) => {
@@ -178,17 +189,6 @@ export async function getAuth() {
             message: 'Password sign-in is disabled. Use your organization SSO provider.',
           });
         }
-      }),
-      after: createAuthMiddleware(async (context) => {
-        if (context.path !== '/change-password' || context.context.returned instanceof APIError) {
-          return;
-        }
-        const userId = context.context.session?.user.id;
-        if (!userId) return;
-        await db.user.updateMany({
-          where: { id: userId, mustChangePassword: true },
-          data: { mustChangePassword: false },
-        });
       }),
     },
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
