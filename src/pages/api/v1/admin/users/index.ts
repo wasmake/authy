@@ -91,6 +91,7 @@ export default apiHandler(async (req, res) => {
             lastName: input.lastName,
             name: `${input.firstName} ${input.lastName}`,
             email: input.email.toLocaleLowerCase(),
+            emailVerified: true,
             companyRole: input.companyRole,
             mustChangePassword: true,
           },
