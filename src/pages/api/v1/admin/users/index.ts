@@ -201,6 +201,11 @@ async function listUsers(organizationId: string, membershipId?: string) {
           image: true,
           companyRole: true,
           suspendedAt: true,
+          accounts: {
+            where: { providerId: 'credential', password: { not: null } },
+            select: { id: true },
+            take: 1,
+          },
           groupMembers: {
             where: { group: { organizationId } },
             select: { group: { select: { id: true, name: true } } },
@@ -217,6 +222,7 @@ async function listUsers(organizationId: string, membershipId?: string) {
         select: { role: { select: { id: true, name: true, description: true } } },
         orderBy: { role: { name: 'asc' } },
       },
+      organization: { select: { passwordLoginEnabled: true } },
     },
   });
 
@@ -241,6 +247,8 @@ async function listUsers(organizationId: string, membershipId?: string) {
       roles: membership.roles.map(({ role }) => role),
       groups: membership.user.groupMembers.map(({ group }) => group),
       applications: membership.user.assignments.map(({ application }) => application),
+      canRequestCredentialRegeneration:
+        membership.organization.passwordLoginEnabled && Boolean(membership.user.accounts.length),
     };
   });
 }

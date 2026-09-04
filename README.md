@@ -61,6 +61,7 @@ Groups bundle membership and inherited application permissions into reusable, au
 - Entra-backed Active Directory support for cloud or federated directories
 - One-time fresh-install owner setup with no seeded users or shared demo passwords
 - Admin-generated users with emailed temporary credentials and mandatory first-login password rotation
+- Admin credential regeneration with session revocation and mandatory password replacement
 - Animated password-strength guidance and a skippable, auto-navigating product tour
 - Encrypted tenant Vault for passwords, secrets, and environment variables with direct/group access
 - Strict organization membership checks on every protected domain query

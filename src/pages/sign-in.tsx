@@ -46,7 +46,9 @@ export default function SignIn() {
 
   useEffect(() => {
     if (!session.isPending && session.data && router.isReady) {
-      window.location.assign(authenticatedDestination);
+      void destinationAfterAuthentication(authenticatedDestination).then((destination) => {
+        window.location.assign(destination);
+      });
     }
   }, [authenticatedDestination, router.isReady, session.data, session.isPending]);
 
@@ -82,6 +84,11 @@ export default function SignIn() {
     event.preventDefault();
     setBusy(true);
     setError('');
+    if (oidcContinuation && !(await clearOidcLoginPrompt())) {
+      setError('Unable to prepare secure sign-in. Try again.');
+      setBusy(false);
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const result = await authClient.signIn.email({
       email,
@@ -93,20 +100,21 @@ export default function SignIn() {
       setBusy(false);
       return;
     }
-    if (result.data && 'url' in result.data && typeof result.data.url === 'string') {
-      window.location.assign(result.data.url);
-      return;
-    }
-    window.location.assign(authenticatedDestination);
+    window.location.assign(await destinationAfterAuthentication(authenticatedDestination));
   }
 
   async function signInWithSso() {
     if (!methods?.provider) return;
     setBusy(true);
     setError('');
+    if (oidcContinuation && !(await clearOidcLoginPrompt())) {
+      setError('Unable to prepare secure sign-in. Try again.');
+      setBusy(false);
+      return;
+    }
     const result = await authClient.signIn.social({
       provider: methods.provider.authProvider,
-      callbackURL: authenticatedDestination,
+      callbackURL: oidcContinuation ? router.asPath : '/',
       errorCallbackURL: oidcContinuation ? router.asPath : '/sign-in',
       loginHint: email,
     });
@@ -249,6 +257,28 @@ export default function SignIn() {
       </section>
     </main>
   );
+}
+
+async function destinationAfterAuthentication(destination: string): Promise<string> {
+  try {
+    const response = await fetch('/api/v1/me');
+    const body = (await response.json()) as { data?: { mustChangePassword?: boolean } };
+    if (!response.ok) return '/';
+    return body.data?.mustChangePassword
+      ? `/change-password?continue=${encodeURIComponent(destination)}`
+      : destination;
+  } catch {
+    return '/';
+  }
+}
+
+async function clearOidcLoginPrompt(): Promise<boolean> {
+  try {
+    const response = await fetch('/api/v1/auth/oidc-prompt', { method: 'DELETE' });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 function providerLabel(type: NonNullable<AuthMethods['provider']>['type']): string {

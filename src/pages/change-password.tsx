@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
 import { authClient } from '@/modules/auth/client';
+import { parseOidcContinuation } from '@/modules/auth/oidc-continuation';
 import { meetsPasswordPolicy, passwordRequirementResults } from '@/modules/users/password-policy';
 
 export default function ChangePassword() {
@@ -25,6 +26,7 @@ export default function ChangePassword() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [credentialChanged, setCredentialChanged] = useState(false);
+  const continuation = parseOidcContinuation(router.query.continue);
 
   useEffect(() => {
     if (!session.isPending && !session.data) void router.replace('/sign-in');
@@ -46,12 +48,13 @@ export default function ChangePassword() {
   async function finishRotation() {
     const response = await fetch('/api/v1/account/password-changed', { method: 'POST' });
     const body = (await response.json().catch(() => null)) as {
+      data?: { onboardingCompletedAt?: string | null };
       error?: { message?: string };
     } | null;
     if (!response.ok) {
       throw new Error(body?.error?.message ?? 'Unable to finish securing your account.');
     }
-    await router.replace('/?tour=1');
+    await router.replace(continuation ?? (body?.data?.onboardingCompletedAt ? '/' : '/?tour=1'));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -117,14 +120,14 @@ export default function ChangePassword() {
           </div>
           <div className="relative mt-12 lg:mt-28">
             <p className="text-xs font-bold uppercase tracking-[.2em] text-violet-300">
-              First sign-in protection
+              Credential protection
             </p>
             <h1 className="mt-4 text-3xl font-semibold leading-tight sm:text-4xl">
               Replace your temporary password.
             </h1>
             <p className="mt-5 max-w-sm text-sm leading-6 text-slate-300">
-              Before entering your workspace, create a password known only to you. Other sessions
-              will be revoked automatically.
+              Create a replacement password known only to you before continuing. Other sessions will
+              be revoked automatically.
             </p>
             <div className="mt-8 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
               <LockKeyhole aria-hidden="true" className="shrink-0 text-emerald-300" size={21} />
@@ -291,7 +294,7 @@ export default function ChangePassword() {
                   <div>
                     <p className="font-semibold">Your new password is active</p>
                     <p className="mt-1 text-sm opacity-80">
-                      Continue to finish account setup and start the workspace tour.
+                      Continue to finish securing your account.
                     </p>
                   </div>
                 </div>

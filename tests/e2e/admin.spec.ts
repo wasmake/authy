@@ -34,7 +34,7 @@ test('admin can configure email delivery and edit templates', async ({ page }) =
     page.getByRole('heading', { name: 'Emails that feel like your workspace' }),
   ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Resend delivery' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: /New user credentials/ })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: /User credentials/ })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -43,4 +43,12 @@ test('admin can configure email delivery and edit templates', async ({ page }) =
   await expect(page.getByTitle('Insert {{resetUrl}}')).toBeVisible();
   await expect(page.getByTitle('Insert {{temporaryPassword}}')).toHaveCount(0);
   await expect(page.getByTitle('Email template preview')).toBeVisible();
+});
+
+test('admin can access member credential regeneration', async ({ page }) => {
+  await page.getByRole('link', { name: 'People' }).click();
+  const member = page.locator('tr', { hasText: 'user@acme.test' });
+  await member.getByRole('button', { name: /Manage/ }).click();
+  await expect(page.getByRole('heading', { name: 'New sign-in credentials' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Email new credentials' })).toBeVisible();
 });

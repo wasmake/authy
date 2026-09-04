@@ -22,15 +22,15 @@ const commonPlaceholders = [
 export const emailTemplateDefinitions: Record<EmailTemplateType, EmailTemplateDefinition> = {
   USER_CREDENTIALS: {
     type: 'USER_CREDENTIALS',
-    label: 'New user credentials',
-    description: 'Sent when an administrator creates a new password-based account.',
+    label: 'User credentials',
+    description: 'Sent when an administrator creates or regenerates password credentials.',
     subject: 'Your {{organizationName}} sign-in credentials',
     placeholders: [...commonPlaceholders, 'signInUrl', 'temporaryPassword'],
     html: `<div style="font-family:Arial,sans-serif;color:#172033;line-height:1.6;max-width:620px;margin:0 auto">
   <p style="font-size:14px;color:#6b7280">{{organizationName}}</p>
-  <h1 style="font-size:28px;line-height:1.2">Your account is ready</h1>
+  <h1 style="font-size:28px;line-height:1.2">Your sign-in credentials are ready</h1>
   <p>Hello {{recipientName}},</p>
-  <p>An account has been created for you. Use the temporary credentials below to sign in.</p>
+  <p>Use the temporary credentials below to sign in.</p>
   <div style="background-color:#f4f3ff;border-radius:12px;padding:18px;margin:24px 0">
     <p style="margin:0 0 8px"><strong>Email</strong><br>{{recipientEmail}}</p>
     <p style="margin:0"><strong>Temporary password</strong><br><code>{{temporaryPassword}}</code></p>

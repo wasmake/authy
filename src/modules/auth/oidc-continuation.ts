@@ -29,3 +29,12 @@ export function getOidcContinuation(query: Record<string, QueryValue>): string |
   if (typeof query.nonce === 'string' && query.nonce) parameters.set('nonce', query.nonce);
   return `/api/auth/oauth2/authorize?${parameters.toString()}`;
 }
+
+export function parseOidcContinuation(value: QueryValue): string | null {
+  if (typeof value !== 'string' || !value.startsWith('/api/auth/oauth2/authorize?')) return null;
+  const url = new URL(value, 'https://authy.invalid');
+  if (url.origin !== 'https://authy.invalid' || url.pathname !== '/api/auth/oauth2/authorize') {
+    return null;
+  }
+  return getOidcContinuation(Object.fromEntries(url.searchParams));
+}

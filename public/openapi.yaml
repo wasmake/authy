@@ -41,6 +41,11 @@ paths:
       parameters:
         [{ name: email, in: query, required: true, schema: { type: string, format: email } }]
       responses: { '200': { description: Available sign-in method } }
+  /auth/oidc-prompt:
+    delete:
+      security: []
+      summary: Clear a pending OIDC login prompt before mandatory password rotation
+      responses: { '204': { description: Prompt cleared } }
   /applications:
     get:
       summary: List assigned or marketplace applications
@@ -138,6 +143,17 @@ paths:
       summary: Remove a user from the organization (admin)
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { '204': { description: Removed } }
+  /admin/users/{id}/credentials:
+    post:
+      summary: Generate and email a replacement temporary password (admin)
+      description: Available only for non-self password identities belonging solely to the current organization. Revokes active sessions and requires password replacement at next sign-in.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        {
+          '200': { description: Replacement credentials accepted for delivery },
+          '400': { $ref: '#/components/responses/Error' },
+          '404': { $ref: '#/components/responses/Error' },
+        }
   /admin/groups:
     get:
       {

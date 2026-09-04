@@ -159,8 +159,20 @@ export async function getAuth() {
         if (typeof email !== 'string') return;
         const membership = await db.membership.findFirst({
           where: { user: { email: { equals: email, mode: 'insensitive' } } },
-          select: { organization: { select: { passwordLoginEnabled: true } } },
+          select: {
+            organization: { select: { passwordLoginEnabled: true } },
+            user: { select: { mustChangePassword: true } },
+          },
         });
+        const oidcPrompt = await context.getSignedCookie(
+          'oidc_login_prompt',
+          context.context.secret,
+        );
+        if (membership?.user.mustChangePassword && oidcPrompt) {
+          throw new APIError('FORBIDDEN', {
+            message: 'Restart sign-in to change your temporary password before continuing.',
+          });
+        }
         if (membership && !membership.organization.passwordLoginEnabled) {
           throw new APIError('FORBIDDEN', {
             message: 'Password sign-in is disabled. Use your organization SSO provider.',
@@ -175,7 +187,7 @@ export async function getAuth() {
         if (!userId) return;
         await db.user.updateMany({
           where: { id: userId, mustChangePassword: true },
-          data: { mustChangePassword: false, onboardingCompletedAt: null },
+          data: { mustChangePassword: false },
         });
       }),
     },

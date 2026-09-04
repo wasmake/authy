@@ -2,6 +2,8 @@ import {
   Check,
   ChevronRight,
   CircleUserRound,
+  KeyRound,
+  Loader2,
   Search,
   ShieldCheck,
   Trash2,
@@ -36,6 +38,7 @@ type AdminUser = {
   roles: Choice[];
   groups: Choice[];
   applications: ApplicationChoice[];
+  canRequestCredentialRegeneration: boolean;
 };
 type UsersData = {
   users: AdminUser[];
@@ -64,9 +67,13 @@ export default function AdminUsers() {
   const [status, setStatus] = useState<UserStatus>('ACTIVE');
   const [selections, setSelections] = useState(emptySelections);
   const [saving, setSaving] = useState(false);
+  const [regeneratingCredentials, setRegeneratingCredentials] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
 
   const selected = usersApi.data?.users.find((user) => user.id === selectedId);
+  const canRequestCredentialRegeneration =
+    selected?.canRequestCredentialRegeneration === true && selected.user.id !== me.data?.id;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredUsers = (usersApi.data?.users ?? []).filter((membership) => {
     const searchable = [
@@ -106,26 +113,30 @@ export default function AdminUsers() {
     setStatus('ACTIVE');
     setSelections(emptySelections);
     setActionError('');
+    setActionMessage('');
     setPanel('add');
   }
 
   function openManage(user: AdminUser) {
     setSelectedId(user.id);
     setActionError('');
+    setActionMessage('');
     setPanel('manage');
   }
 
   function closePanel(force = false) {
-    if (saving && !force) return;
+    if ((saving || regeneratingCredentials) && !force) return;
     setPanel(null);
     setSelectedId('');
     setActionError('');
+    setActionMessage('');
   }
 
   async function addUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setActionError('');
+    setActionMessage('');
     try {
       const created = await request<AdminUser>('/api/v1/admin/users', {
         method: 'POST',
@@ -157,6 +168,7 @@ export default function AdminUsers() {
     if (!selected) return;
     setSaving(true);
     setActionError('');
+    setActionMessage('');
     try {
       await request(`/api/v1/admin/users/${selected.id}`, {
         method: 'PATCH',
@@ -198,6 +210,7 @@ export default function AdminUsers() {
       return;
     setSaving(true);
     setActionError('');
+    setActionMessage('');
     try {
       await request(`/api/v1/admin/users/${selected.id}`, { method: 'DELETE' });
       usersApi.setData((current) =>
@@ -210,6 +223,32 @@ export default function AdminUsers() {
       setActionError(error instanceof Error ? error.message : 'Unable to remove user');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function regenerateCredentials() {
+    if (!selected || !canRequestCredentialRegeneration) return;
+    if (
+      !window.confirm(
+        `Generate and email new credentials for ${selected.user.name}? Their current password will stop working and all active sessions will be signed out.`,
+      )
+    )
+      return;
+
+    setRegeneratingCredentials(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      await request(`/api/v1/admin/users/${selected.id}/credentials`, { method: 'POST' });
+      setActionMessage(
+        `New temporary credentials were emailed to ${selected.user.email}. They must change the password after signing in.`,
+      );
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : 'Unable to generate and email new credentials',
+      );
+    } finally {
+      setRegeneratingCredentials(false);
     }
   }
 
@@ -454,28 +493,64 @@ export default function AdminUsers() {
                 )}
 
                 {panel === 'manage' && selected && (
-                  <dl className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-3">
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        First name
-                      </dt>
-                      <dd className="mt-1 text-sm font-medium">{selected.user.firstName}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Last name
-                      </dt>
-                      <dd className="mt-1 text-sm font-medium">
-                        {selected.user.lastName || 'Not provided'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Company role
-                      </dt>
-                      <dd className="mt-1 text-sm font-medium">{selected.user.companyRole}</dd>
-                    </div>
-                  </dl>
+                  <>
+                    <dl className="grid gap-4 rounded-xl border border-border bg-background p-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          First name
+                        </dt>
+                        <dd className="mt-1 text-sm font-medium">{selected.user.firstName}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Last name
+                        </dt>
+                        <dd className="mt-1 text-sm font-medium">
+                          {selected.user.lastName || 'Not provided'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          Company role
+                        </dt>
+                        <dd className="mt-1 text-sm font-medium">{selected.user.companyRole}</dd>
+                      </div>
+                    </dl>
+
+                    <section className="rounded-xl border border-border bg-background p-4">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex gap-3">
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                            <KeyRound size={18} />
+                          </span>
+                          <div>
+                            <h3 className="text-sm font-semibold">New sign-in credentials</h3>
+                            <p className="mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                              {credentialManagementMessage(
+                                canRequestCredentialRegeneration,
+                                selected.user.id === me.data?.id,
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        {canRequestCredentialRegeneration && (
+                          <button
+                            className="button-secondary shrink-0 gap-2"
+                            disabled={saving || regeneratingCredentials}
+                            onClick={() => void regenerateCredentials()}
+                            type="button"
+                          >
+                            {regeneratingCredentials ? (
+                              <Loader2 className="animate-spin" size={16} />
+                            ) : (
+                              <KeyRound size={16} />
+                            )}
+                            {regeneratingCredentials ? 'Sending...' : 'Email new credentials'}
+                          </button>
+                        )}
+                      </div>
+                    </section>
+                  </>
                 )}
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -546,13 +621,21 @@ export default function AdminUsers() {
                     {actionError}
                   </p>
                 )}
+                {actionMessage && (
+                  <p
+                    className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                    role="status"
+                  >
+                    {actionMessage}
+                  </p>
+                )}
               </div>
 
               <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border bg-card/95 p-6 backdrop-blur">
                 {panel === 'manage' && selected?.user.id !== me.data?.id ? (
                   <button
                     className="button-secondary gap-2 !border-red-200 !text-red-600 hover:!bg-red-50 dark:!border-red-900 dark:hover:!bg-red-950"
-                    disabled={saving}
+                    disabled={saving || regeneratingCredentials}
                     onClick={removeUser}
                     type="button"
                   >
@@ -562,10 +645,19 @@ export default function AdminUsers() {
                   <span />
                 )}
                 <div className="flex gap-2">
-                  <button className="button-secondary" onClick={() => closePanel()} type="button">
+                  <button
+                    className="button-secondary"
+                    disabled={saving || regeneratingCredentials}
+                    onClick={() => closePanel()}
+                    type="button"
+                  >
                     Cancel
                   </button>
-                  <button className="button min-w-[130px] gap-2" disabled={saving} type="submit">
+                  <button
+                    className="button min-w-[130px] gap-2"
+                    disabled={saving || regeneratingCredentials}
+                    type="submit"
+                  >
                     {!saving && <Check size={16} />}
                     {saving
                       ? 'Saving...'
@@ -658,6 +750,14 @@ function compareUsers(left: AdminUser, right: AdminUser): number {
   return `${left.user.firstName} ${left.user.lastName}`.localeCompare(
     `${right.user.firstName} ${right.user.lastName}`,
   );
+}
+
+function credentialManagementMessage(available: boolean, self: boolean): string {
+  if (available) {
+    return 'Generate a new temporary password, revoke active sessions, and require a password change at next sign-in.';
+  }
+  if (self) return 'Administrators cannot regenerate their own credentials here.';
+  return 'Credential regeneration is unavailable for this member or organization sign-in policy.';
 }
 
 async function request<T = unknown>(url: string, init?: RequestInit): Promise<T | undefined> {

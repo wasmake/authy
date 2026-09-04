@@ -1,4 +1,4 @@
-import { getOidcContinuation } from '@/modules/auth/oidc-continuation';
+import { getOidcContinuation, parseOidcContinuation } from '@/modules/auth/oidc-continuation';
 
 const validQuery = {
   client_id: 'docmost-production',
@@ -35,5 +35,12 @@ describe('OIDC sign-in continuation', () => {
   it('rejects non-code and non-S256 requests', () => {
     expect(getOidcContinuation({ ...validQuery, response_type: 'token' })).toBeNull();
     expect(getOidcContinuation({ ...validQuery, code_challenge_method: 'plain' })).toBeNull();
+  });
+
+  it('accepts only validated internal authorization continuations', () => {
+    const continuation = getOidcContinuation(validQuery)!;
+    expect(parseOidcContinuation(continuation)).toBe(continuation);
+    expect(parseOidcContinuation('https://attacker.example/steal')).toBeNull();
+    expect(parseOidcContinuation('/marketplace')).toBeNull();
   });
 });
