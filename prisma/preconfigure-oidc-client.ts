@@ -36,16 +36,6 @@ async function main() {
   }
 
   for (const client of clients) {
-    await db.application.deleteMany({
-      where: {
-        type: 'OIDC',
-        name: client.name,
-        launchUrl: client.launchUrl,
-        redirectUris: { has: client.redirectUri },
-        clientId: { not: client.clientId },
-      },
-    });
-
     const existing = await db.application.findUnique({
       where: { clientId: client.clientId },
     });
@@ -60,22 +50,40 @@ async function main() {
       return;
     }
 
-    const application =
-      existing ??
-      (await db.application.create({
-        data: {
-          organizationId: organization.id,
-          name: client.name,
-          description: client.description,
-          type: 'OIDC',
-          launchUrl: client.launchUrl,
-          clientId: client.clientId,
-          redirectUris: [client.redirectUri],
-          scopes: ['openid', 'profile', 'email'],
-          claims: { email_verified: true },
-          isPublished: true,
-        },
-      }));
+    await db.application.deleteMany({
+      where: {
+        organizationId: organization.id,
+        type: 'OIDC',
+        name: { equals: client.name, mode: 'insensitive' },
+        clientId: { not: client.clientId },
+      },
+    });
+
+    const application = existing
+      ? await db.application.update({
+          where: { id: existing.id },
+          data: {
+            name: client.name,
+            description: client.description,
+            launchUrl: client.launchUrl,
+            redirectUris: [client.redirectUri],
+            isPublished: true,
+          },
+        })
+      : await db.application.create({
+          data: {
+            organizationId: organization.id,
+            name: client.name,
+            description: client.description,
+            type: 'OIDC',
+            launchUrl: client.launchUrl,
+            clientId: client.clientId,
+            redirectUris: [client.redirectUri],
+            scopes: ['openid', 'profile', 'email'],
+            claims: { email_verified: true },
+            isPublished: true,
+          },
+        });
 
     const memberships = await db.membership.findMany({
       where: { organizationId: application.organizationId },
